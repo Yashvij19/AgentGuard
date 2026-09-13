@@ -1,0 +1,65 @@
+# ==========================================
+# AgentGuard Master Git Ignore Rules
+# ==========================================
+
+# 1. Environment & Secrets (CRITICAL: NEVER COMMIT)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.cert
+*.secret
+
+# 2. Python Virtual Environments
+.venv/
+venv/
+ENV/
+env/
+env.bak/
+venv.bak/
+
+# 3. Python Bytecode & Optimization Caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# 4. Packaging & Build Artifacts
+*.egg-info/
+build/
+dist/
+eggs/
+.eggs/
+parts/
+var/
+sdist/
+develop-eggs/
+.installed.cfg
+*.egg
+
+# 5. Testing, Type-Checking & Linting Caches
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+nosetests.xml
+coverage.xml
+*.cover
+
+# 6. Database / Local Docker Volumes
+pgdata/
+*.db
+*.sqlite3
+
+# 7. Operating System & Editor Files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+*~

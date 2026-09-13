@@ -1,0 +1,30 @@
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: agentguard-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: agentguard
+      POSTGRES_USER: agentguard
+      POSTGRES_PASSWORD: dev_password
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agentguard -d agentguard"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  opa:
+    image: openpolicyagent/opa:latest
+    container_name: agentguard-opa
+    restart: unless-stopped
+    ports:
+      - "8181:8181"
+    command: "run --server --log-level debug"
+
+volumes:
+  pgdata:

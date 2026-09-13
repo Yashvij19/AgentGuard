@@ -1,0 +1,109 @@
+"""
+Test data factories for AgentGuard tests.
+"""
+
+import hashlib
+import hmac
+from datetime import UTC, datetime
+from typing import Any
+from uuid import UUID, uuid4
+
+from app.domain.models.run import Run, RunStatus, TriggerType
+from app.domain.models.run_event import EventType, RunEvent
+
+
+def compute_webhook_signature(payload_bytes: bytes, secret: str) -> str:
+    """Compute the HMAC-SHA256 signature header matching GitHub's format."""
+    signature = hmac.new(
+        key=secret.encode("utf-8"),
+        msg=payload_bytes,
+        digestmod=hashlib.sha256,
+    ).hexdigest()
+    return f"sha256={signature}"
+
+
+def create_test_run(
+    run_id: UUID | None = None,
+    repo: str = "octocat/Hello-World",
+    pr_number: int = 42,
+    head_sha: str = "6dcb09b5b57875f334f61aebed695e2e4193db5e",
+    trigger_type: TriggerType = TriggerType.PULL_REQUEST,
+    status: RunStatus = RunStatus.QUEUED,
+    policy_version: int | None = 1,
+    started_at: datetime | None = None,
+    completed_at: datetime | None = None,
+) -> Run:
+    """Factory helper generating a domain Run instance."""
+    now = datetime.now(UTC)
+    return Run(
+        id=run_id or uuid4(),
+        repo=repo,
+        pr_number=pr_number,
+        head_sha=head_sha,
+        trigger_type=trigger_type,
+        status=status,
+        policy_version=policy_version,
+        started_at=started_at,
+        completed_at=completed_at,
+        created_at=now,
+        updated_at=now,
+    )
+
+
+def create_test_event(
+    run_id: UUID | None = None,
+    step_name: str = "plan",
+    event_type: EventType = EventType.DECISION,
+    content: dict[str, Any] | None = None,
+    tokens_used: int = 150,
+    latency_ms: int = 420,
+) -> RunEvent:
+    """Factory helper generating a domain RunEvent instance."""
+    return RunEvent(
+        id=uuid4(),
+        run_id=run_id or uuid4(),
+        step_name=step_name,
+        event_type=event_type,
+        content=content or {"note": "Test decision event"},
+        tokens_used=tokens_used,
+        latency_ms=latency_ms,
+        created_at=datetime.now(UTC),
+    )
+
+
+def create_test_webhook_payload(
+    action: str = "opened",
+    repo_full_name: str = "octocat/Hello-World",
+    pr_number: int = 42,
+    head_sha: str = "6dcb09b5b57875f334f61aebed695e2e4193db5e",
+) -> dict[str, Any]:
+    """Factory helper generating a typed GitHub PR webhook payload dict."""
+    return {
+        "action": action,
+        "number": pr_number,
+        "pull_request": {
+            "number": pr_number,
+            "title": "Fix memory leak in buffer pool",
+            "body": "Closes #101 by ensuring buffer cleanup.",
+            "head": {
+                "sha": head_sha,
+                "ref": "fix/buffer-leak",
+            },
+            "base": {
+                "sha": "1234567890abcdef1234567890abcdef12345678",
+                "ref": "main",
+            },
+            "html_url": f"https://github.com/{repo_full_name}/pull/{pr_number}",
+        },
+        "repository": {
+            "id": 1296269,
+            "name": repo_full_name.split("/")[-1],
+            "full_name": repo_full_name,
+            "owner": {
+                "login": repo_full_name.split("/")[0],
+            },
+        },
+        "sender": {
+            "login": "octocat",
+        },
+    }
