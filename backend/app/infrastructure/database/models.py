@@ -8,15 +8,7 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import (
-    DateTime,
-    ForeignKey,
-    Index,
-    Integer,
-    Numeric,
-    String,
-    text,
-)
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, Numeric, String, Text, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -148,6 +140,14 @@ class RunORM(Base):
         cascade="all, delete-orphan",
         order_by="RunEventORM.created_at",
     )
+        # Add this relationship to RunORM
+    policy_decisions: Mapped[list["PolicyDecisionORM"]] = relationship(
+        "PolicyDecisionORM",
+        back_populates="run",
+        cascade="all, delete-orphan",
+        order_by="PolicyDecisionORM.created_at",
+    )
+
 
     __table_args__ = (Index("ix_runs_repo_pr_status", "repo", "pr_number", "status"),)
 
@@ -202,3 +202,136 @@ class RunEventORM(Base):
     )
 
     run: Mapped["RunORM"] = relationship("RunORM", back_populates="events")
+
+class PolicyORM(Base):
+    """
+    Persisted security policy configuration per repository with version history.
+    """
+
+    __tablename__ = "policies"
+
+    id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid4,
+    )
+    repo: Mapped[str] = mapped_column(
+        String(255),
+        unique=True,
+        nullable=False,
+        index=True,
+        doc="Repository in owner/name format",
+    )
+    yaml_content: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        doc="Raw YAML string of the policy",
+    )
+    rego_bundle: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        doc="Compiled Rego policy bundle or compiled data document",
+    )
+    parsed_content: Mapped[dict[str, Any]] = mapped_column(
+        JSONB,
+        nullable=False,
+        server_default=text("'{}'::jsonb"),
+        doc="Parsed and validated policy JSON representation",
+    )
+    version: Mapped[int] = mapped_column(
+        Integer,
+        default=1,
+        nullable=False,
+        doc="Monotonically increasing version counter",
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+
+
+class PolicyDecisionORM(Base):
+    """
+    Immutable audit record of an evaluation decision made for an ActionIntent.
+    Forms the backbone of the auditable Action Ledger.
+    """
+
+    __tablename__ = "policy_decisions"
+
+    id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid4,
+    )
+    run_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("runs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    action_intent_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        nullable=False,
+        index=True,
+        doc="UUID of the ActionIntent that was evaluated",
+    )
+    action_requested: Mapped[dict[str, Any]] = mapped_column(
+        JSONB,
+        nullable=False,
+        server_default=text("'{}'::jsonb"),
+        doc="Snapshot of the ActionIntent payload evaluated",
+    )
+    rule_matched: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+        doc="Identifier of the specific policy rule that triggered the verdict",
+    )
+    risk_score: Mapped[int] = mapped_column(
+        Integer,
+        default=0,
+        nullable=False,
+        doc="Risk score calculated by RiskEngine (0-100)",
+    )
+    decision: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        doc="Verdict: ALLOW, DENY, or REQUIRE_APPROVAL",
+    )
+    policy_version: Mapped[int] = mapped_column(
+        Integer,
+        default=1,
+        nullable=False,
+        doc="Version of the policy evaluated against",
+    )
+    opa_query_id: Mapped[str | None] = mapped_column(
+        String(128),
+        nullable=True,
+        doc="Correlation ID from OPA decision log",
+    )
+    reason: Mapped[str] = mapped_column(
+        Text,
+        default="",
+        nullable=False,
+        doc="Human-readable rationale for verdict",
+    )
+    details: Mapped[dict[str, Any]] = mapped_column(
+        JSONB,
+        nullable=False,
+        server_default=text("'{}'::jsonb"),
+        doc="Auxiliary diagnostic data from policy evaluation",
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+
+    run: Mapped["RunORM"] = relationship("RunORM", back_populates="policy_decisions")
+

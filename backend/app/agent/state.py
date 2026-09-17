@@ -25,9 +25,22 @@ class AgentState(TypedDict, total=False):
     # Node Outputs
     plan: str
     investigation: str
+    reproduced: bool | None
+    reproduce_details: str | None
+    patch: str | None
+    patch_file: str | None
+    verified: bool | None
+    verification_details: str | None
     summary_report: str
     comment_id: int | None
 
-    # Error Tracking
+    # Governance & Policy Tracking
+    action_intents: list[dict[str, Any]]
+    policy_decisions: list[dict[str, Any]]
+    decision_traces: list[dict[str, Any]]
+    halted: bool
+    halt_reason: str | None
+
+    # Error & Metadata Tracking
     error: str | None
     metadata: dict[str, Any]

@@ -1,0 +1,73 @@
+version: 1
+
+metadata:
+  name: "default-security-policy"
+  description: "Standard governance policy for autonomous PR review and fix agents"
+  owner: "platform-security"
+
+capabilities:
+  allow:
+    - github.read_file
+    - github.read_pr
+    - github.comment_pr
+  approval:
+    - github.create_commit
+    - github.create_pr
+  deny:
+    - github.delete_repository
+    - github.manage_webhooks
+    - github.admin
+
+filesystem:
+  read:
+    - "**/*"
+  write:
+    - "src/**/*"
+    - "tests/**/*"
+    - "docs/**/*"
+
+commands:
+  allow:
+    - "^pytest.*"
+    - "^poetry run pytest.*"
+    - "^npm test.*"
+    - "^ruff check.*"
+  deny:
+    - ".*rm -rf.*"
+    - ".*curl.*|.*sh"
+    - ".*wget.*|.*sh"
+    - ".*git push.*--force.*"
+
+network:
+  allowed_domains:
+    - "api.github.com"
+    - "pypi.org"
+
+resources:
+  max_execution_time_seconds: 300
+  max_files_modified: 10
+
+risk_weights:
+  file_modify: 10
+  file_create: 5
+  command_exec: 25
+  sensitive_path: 50
+
+risk_thresholds:
+  require_approval: 60
+  deny: 90
+
+budget:
+  max_tokens_per_run: 100000
+  max_cost_usd_per_run: 1.00
+
+sensitive_actions:
+  - name: "ci_workflow_tampering"
+    trigger: "file_pattern"
+    pattern: ".github/workflows/**"
+    description: "Modifications to CI/CD workflows require human review"
+
+  - name: "auth_payment_tampering"
+    trigger: "file_pattern"
+    pattern: "**/auth/**|**/payment/**"
+    description: "Modifications to authentication or payment logic require human review"

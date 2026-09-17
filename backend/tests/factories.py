@@ -8,6 +8,15 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID, uuid4
 
+from app.domain.models.action_intent import ActionIntent, ActionType
+from app.domain.models.policy import (
+    CapabilityConfig,
+    CommandConfig,
+    FilesystemConfig,
+    NetworkConfig,
+    Policy,
+    PolicyConfig,
+)
 from app.domain.models.run import Run, RunStatus, TriggerType
 from app.domain.models.run_event import EventType, RunEvent
 
@@ -107,3 +116,59 @@ def create_test_webhook_payload(
             "login": "octocat",
         },
     }
+
+
+def create_test_action_intent(
+    run_id: UUID | None = None,
+    action: ActionType = ActionType.FILE_READ,
+    target: str = "src/main.py",
+    operation: str = "read",
+    capability: str = "github.read_file",
+    reason: str = "Read source file to formulate fix",
+    metadata: dict[str, Any] | None = None,
+) -> ActionIntent:
+    """Factory helper generating a domain ActionIntent instance."""
+    return ActionIntent(
+        id=uuid4(),
+        run_id=run_id or uuid4(),
+        action=action,
+        target=target,
+        operation=operation,
+        capability=capability,
+        reason=reason,
+        metadata=metadata or {},
+        created_at=datetime.now(UTC),
+    )
+def create_test_policy_config() -> PolicyConfig:
+    """Factory helper generating a standard PolicyConfig."""
+    return PolicyConfig(
+        version=1,
+        capabilities=CapabilityConfig(
+            allow=["github.read_file", "github.read_pr", "github.comment_pr"],
+            approval=["github.create_commit"],
+            deny=["github.delete_repository"],
+        ),
+        filesystem=FilesystemConfig(
+            read=["**/*"],
+            write=["src/**/*", "tests/**/*"],
+        ),
+        commands=CommandConfig(
+            allow=["^pytest.*"],
+            deny=[".*rm -rf.*"],
+        ),
+        network=NetworkConfig(
+            allowed_domains=["api.github.com"],
+        ),
+    )
+def create_test_policy(repo: str = "octocat/Hello-World", version: int = 1) -> Policy:
+    """Factory helper generating a domain Policy instance."""
+    now = datetime.now(UTC)
+    return Policy(
+        id=uuid4(),
+        repo=repo,
+        yaml_content="# Test policy",
+        parsed_content=create_test_policy_config(),
+        version=version,
+        created_at=now,
+        updated_at=now,
+    )

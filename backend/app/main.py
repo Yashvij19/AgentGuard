@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
 from app.api import health_router, runs_router, webhooks_router
+from app.api.policies.router import router as policies_router
 from app.config import settings
 from app.container import container
 from app.middleware import RequestIdMiddleware, register_error_handlers
@@ -83,6 +84,8 @@ def create_app() -> FastAPI:
     application.include_router(health_router)
     application.include_router(webhooks_router)
     application.include_router(runs_router)
+    application.include_router(policies_router, prefix="/api/policies", tags=["policies"])
+
 
     return application
 

@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.container import Container, container
 from app.infrastructure.database.connection import get_db_session
 from app.infrastructure.database.repositories.event_repository import EventRepository
+from app.infrastructure.database.repositories.policy_repository import PolicyRepository
 from app.infrastructure.database.repositories.run_repository import RunRepository
 from app.infrastructure.database.repositories.webhook_repository import WebhookRepository
 from app.services.run_coordinator import RunCoordinator
@@ -64,3 +65,11 @@ def get_webhook_service(
 ) -> WebhookService:
     """FastAPI dependency yielding a session-scoped WebhookService."""
     return cont.get_webhook_service(session)
+
+
+def get_policy_repository(
+    session: DbSessionDep,
+    cont: ContainerDep,
+) -> PolicyRepository:
+    """FastAPI dependency yielding a session-scoped PolicyRepository."""
+    return cont.get_policy_repository(session)
