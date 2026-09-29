@@ -9,9 +9,11 @@ from fastapi.responses import JSONResponse
 
 from app.domain.exceptions import (
     AgentGuardError,
+    ApprovalNotFoundError,
     BudgetExceededError,
     ConcurrentRunError,
     DuplicateDeliveryError,
+    InvalidApprovalStateError,
     PolicyViolationError,
     RunNotFoundError,
     StaleRunError,
@@ -143,5 +145,31 @@ def register_error_handlers(app: FastAPI) -> None:
             content={
                 "error": "InternalServerError",
                 "message": "An unexpected server error occurred.",
+            },
+        )
+
+    @app.exception_handler(ApprovalNotFoundError)
+    async def approval_not_found_handler(
+        request: Request, exc: ApprovalNotFoundError
+    ) -> JSONResponse:
+        """Requested approval UUID does not exist."""
+        return JSONResponse(
+            status_code=404,
+            content={
+                "error": "ApprovalNotFoundError",
+                "message": exc.message,
+            },
+        )
+
+    @app.exception_handler(InvalidApprovalStateError)
+    async def invalid_approval_state_handler(
+        request: Request, exc: InvalidApprovalStateError
+    ) -> JSONResponse:
+        """Approval cannot be decided in its current lifecycle status."""
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": "InvalidApprovalStateError",
+                "message": exc.message,
             },
         )

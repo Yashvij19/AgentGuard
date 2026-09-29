@@ -64,11 +64,35 @@ class Settings(BaseSettings):
     sandbox_provider: str = Field(default="e2b", description="e2b or github_actions")
     e2b_api_key: str | None = None
 
+    e2b_base_url: str = Field(
+        default="https://api.e2b.dev",
+        description="E2B REST API endpoint base URL",
+    )
+
     # OPA Policy Engine
     opa_url: str = Field(
         default="http://localhost:8181",
         description="OPA REST sidecar URL or 'embedded'",
     )
+
+        # Dedicated Provider Overrides (Configured in .env)
+    groq_api_key: str | None = None
+    groq_base_url: str = "https://api.groq.com/openai/v1"
+    groq_models: str = "llama-3.3-70b-versatile,llama-3.1-8b-instant"
+
+    gemini_api_key: str | None = None
+    gemini_models: str = "gemini-2.0-flash"
+
+    nvidia_nim_api_key: str | None = None
+    nvidia_nim_base_url: str = "https://integrate.api.nvidia.com/v1"
+    nvidia_nim_models: str = "meta/llama-3.1-8b-instruct"
+
+    # Notification Webhooks (Slack / Discord)
+    slack_webhook_url: str | None = None
+    discord_webhook_url: str | None = None
+    dashboard_base_url: str = "http://localhost:3000"
+
+
 
     @field_validator("database_url")
     @classmethod
@@ -97,6 +121,54 @@ class Settings(BaseSettings):
         if isinstance(v, dict):
             return cast(dict[str, Any], v)
         return {}
+
+    def get_llm_gateway_config(self) -> dict[str, Any]:
+        """
+        Build the canonical provider dictionary by combining dedicated env vars
+        with any overrides in llm_providers_config.
+        """
+        providers: dict[str, Any] = {}
+
+        # Groq
+        groq_key = self.groq_api_key or self.llm_providers_config.get("providers", {}).get("groq", {}).get("api_key", "")
+        if groq_key:
+            providers["groq"] = {
+                "name": "groq",
+                "api_key": groq_key,
+                "base_url": self.groq_base_url,
+                "models": [m.strip() for m in self.groq_models.split(",") if m.strip()],
+                "role": "fallback",
+                "task_types": ["classification", "formatting", "general"],
+            }
+
+        # Gemini
+        gemini_key = self.gemini_api_key or self.llm_providers_config.get("providers", {}).get("gemini", {}).get("api_key", "")
+        if gemini_key:
+            providers["gemini"] = {
+                "name": "gemini",
+                "api_key": gemini_key,
+                "models": [m.strip() for m in self.gemini_models.split(",") if m.strip()],
+                "role": "primary",
+                "task_types": ["reasoning", "code_generation", "general"],
+            }
+
+        # NVIDIA NIM
+        nim_key = self.nvidia_nim_api_key or self.llm_providers_config.get("providers", {}).get("nvidia_nim", {}).get("api_key", "")
+        if nim_key:
+            providers["nvidia_nim"] = {
+                "name": "nvidia_nim",
+                "api_key": nim_key,
+                "base_url": self.nvidia_nim_base_url,
+                "models": [m.strip() for m in self.nvidia_nim_models.split(",") if m.strip()],
+                "role": "fallback",
+                "task_types": ["reasoning", "general"],
+            }
+
+        return {
+            "providers": providers,
+            "default_primary": "gemini" if "gemini" in providers else ("groq" if "groq" in providers else "openai_compat"),
+            "default_fallback": "groq" if "groq" in providers else "nvidia_nim",
+        }
 
 
 # Global cached settings instance

@@ -1,8 +1,8 @@
 """
-LangGraph workflow definition for AgentGuard Phase 2.
-Assembles the 6-node state graph:
+LangGraph workflow definition for AgentGuard Phase 3.
+Assembles the 6-node governed state graph:
 Plan -> Investigate -> Reproduce -> Patch -> Verify -> Report
-All steps flow through PolicyGateway before execution.
+All steps flow through PolicyGateway before execution and ToolGateway for dispatch.
 """
 
 from collections.abc import Awaitable, Callable
@@ -21,36 +21,47 @@ from app.domain.models.run import Run
 from app.domain.models.run_event import EventType, RunEvent
 from app.domain.protocols.github_client import GitHubClient
 from app.infrastructure.database.repositories.event_repository import EventRepository
+from app.services.approval_service import ApprovalService
+from app.services.llm_gateway import LLMGateway
 from app.services.policy_gateway import PolicyGateway
+from app.services.tool_gateway import ToolGateway
 
 
-def create_phase2_graph(
-    github_client: GitHubClient,
+def create_phase3_graph(
+    github_client: GitHubClient | None = None,
     policy_gateway: PolicyGateway | None = None,
+    tool_gateway: ToolGateway | None = None,
+    llm_gateway: LLMGateway | None = None,
+    approval_service: ApprovalService | None = None,
 ) -> Any:
     """
-    Assemble and compile the Phase 2 6-node governed LangGraph StateGraph.
+    Assemble and compile the Phase 3 governed LangGraph StateGraph.
     """
     graph = StateGraph(cast(Any, AgentState))
 
-    # Node execution wrappers
+    # Node execution wrappers injecting PolicyGateway, ToolGateway, and LLMGateway
     async def _plan(state: AgentState) -> dict[str, Any]:
-        return await plan_node(state, github_client, policy_gateway)
+        return await plan_node(state, github_client=cast(GitHubClient, github_client), policy_gateway=policy_gateway)
 
     async def _investigate(state: AgentState) -> dict[str, Any]:
-        return await investigate_node(state, github_client, policy_gateway)
+        return await investigate_node(state, github_client=cast(GitHubClient, github_client), policy_gateway=policy_gateway)
 
     async def _reproduce(state: AgentState) -> dict[str, Any]:
-        return await reproduce_node(state, policy_gateway)
+        return await reproduce_node(state, policy_gateway=policy_gateway, tool_gateway=tool_gateway)
 
     async def _patch(state: AgentState) -> dict[str, Any]:
-        return await patch_node(state, policy_gateway)
+        return await patch_node(state, policy_gateway=policy_gateway, tool_gateway=tool_gateway, llm_gateway=llm_gateway , approval_service=approval_service)
 
     async def _verify(state: AgentState) -> dict[str, Any]:
-        return await verify_node(state, policy_gateway)
+        return await verify_node(state, policy_gateway=policy_gateway, tool_gateway=tool_gateway)
 
     async def _report(state: AgentState) -> dict[str, Any]:
-        return await report_node(state, github_client, policy_gateway)
+        return await report_node(
+            state,
+            github_client=github_client,
+            policy_gateway=policy_gateway,
+            tool_gateway=tool_gateway,
+        )
 
     # Register Nodes
     graph.add_node("plan", _plan)
@@ -93,20 +104,31 @@ def create_phase2_graph(
     return graph.compile()
 
 
-# Maintain backwards compatibility for Phase 1 references
-create_phase1_graph = create_phase2_graph
+# Maintain backwards compatibility for Phase 1 & 2 references
+create_phase2_graph = create_phase3_graph
+create_phase1_graph = create_phase3_graph
+create_phase4_graph = create_phase3_graph
 
 
 def create_agent_runner(
     github_client: GitHubClient,
     event_repository: EventRepository,
     policy_gateway: PolicyGateway | None = None,
+    tool_gateway: ToolGateway | None = None,
+    llm_gateway: LLMGateway | None = None,
+    approval_service: ApprovalService | None = None,
 ) -> Callable[[Run], Awaitable[None]]:
     """
     Factory creating an agent runner callable suitable for RunCoordinator.
     Executes the governed 6-node LangGraph workflow and records audit traces.
     """
-    compiled_app = create_phase2_graph(github_client, policy_gateway)
+    compiled_app = create_phase3_graph(
+        github_client=github_client,
+        policy_gateway=policy_gateway,
+        tool_gateway=tool_gateway,
+        llm_gateway=llm_gateway,
+        approval_service=approval_service,
+    )
 
     async def runner(run: Run) -> None:
         initial_state: AgentState = {
@@ -119,6 +141,10 @@ def create_agent_runner(
             "policy_decisions": [],
             "decision_traces": [],
             "halted": False,
+            "halt_reason": None,
+            "paused": False,
+            "pending_approval_id": None,
+            "pause_reason": None,
             "error": None,
         }
 
@@ -128,7 +154,7 @@ def create_agent_runner(
                 run_id=run.id,
                 step_name="agent_workflow",
                 event_type=EventType.DECISION,
-                content={"message": "Phase 2 Governed LangGraph workflow started"},
+                content={"message": "Phase 3 Governed LangGraph workflow started"},
             )
         )
 

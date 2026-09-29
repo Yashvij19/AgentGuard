@@ -40,6 +40,9 @@ class AgentState(TypedDict, total=False):
     decision_traces: list[dict[str, Any]]
     halted: bool
     halt_reason: str | None
+    paused: bool
+    pending_approval_id: str | None
+    pause_reason: str | None
 
     # Error & Metadata Tracking
     error: str | None

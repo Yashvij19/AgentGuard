@@ -46,6 +46,10 @@ class Run(BaseModel):
         self.started_at = datetime.now(UTC)
         self.updated_at = datetime.now(UTC)
 
+    def mark_paused(self) -> None:
+        self.status = RunStatus.PAUSED
+        self.updated_at = datetime.now(UTC)
+
     def mark_completed(self) -> None:
         self.status = RunStatus.COMPLETED
         self.completed_at = datetime.now(UTC)

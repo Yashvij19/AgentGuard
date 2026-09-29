@@ -9,13 +9,16 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from app.domain.models.action_intent import ActionIntent, ActionType
+from app.domain.models.approval import Approval, ApprovalStatus
 from app.domain.models.policy import (
+    BudgetConfig,
     CapabilityConfig,
     CommandConfig,
     FilesystemConfig,
     NetworkConfig,
     Policy,
     PolicyConfig,
+    RiskThresholdConfig,
 )
 from app.domain.models.run import Run, RunStatus, TriggerType
 from app.domain.models.run_event import EventType, RunEvent
@@ -159,6 +162,15 @@ def create_test_policy_config() -> PolicyConfig:
         network=NetworkConfig(
             allowed_domains=["api.github.com"],
         ),
+        risk_thresholds=RiskThresholdConfig(
+            require_approval=50,
+            deny=80,
+        ),
+        budget=BudgetConfig(
+            max_tokens_per_run=100_000,
+            max_cost_usd_per_run=5.00,
+            max_llm_calls_per_run=10,
+        ),
     )
 def create_test_policy(repo: str = "octocat/Hello-World", version: int = 1) -> Policy:
     """Factory helper generating a domain Policy instance."""
@@ -171,4 +183,44 @@ def create_test_policy(repo: str = "octocat/Hello-World", version: int = 1) -> P
         version=version,
         created_at=now,
         updated_at=now,
+    )
+
+def create_test_approval(
+    run_id: UUID | None = None,
+    event_id: UUID | None = None,
+    status: ApprovalStatus = ApprovalStatus.PENDING,
+    action_intent: dict[str, Any] | None = None,
+    decision_trace: dict[str, Any] | None = None,
+    decided_by: str | None = None,
+    rejection_reason: str | None = None,
+) -> Approval:
+    """Factory helper generating a domain Approval instance."""
+    now = datetime.now(UTC)
+    intent = action_intent or {
+        "id": str(uuid4()),
+        "run_id": str(run_id or uuid4()),
+        "action": "file_write",
+        "target": "config/prod/app.yaml",
+        "operation": "modify",
+        "capability": "github.create_commit",
+        "reason": "Update production configuration",
+        "metadata": {},
+    }
+    decision = decision_trace or {
+        "run_id": str(run_id or uuid4()),
+        "decision": "REQUIRE_APPROVAL",
+        "rule_matched": "sensitive_files",
+        "reason": "Production path requires authorization",
+    }
+    return Approval(
+        id=uuid4(),
+        run_id=run_id or uuid4(),
+        event_id=event_id or uuid4(),
+        status=status,
+        action_intent=intent,
+        decision_trace=decision,
+        requested_at=now,
+        decided_at=now if status != ApprovalStatus.PENDING else None,
+        decided_by=decided_by,
+        rejection_reason=rejection_reason,
     )

@@ -8,11 +8,12 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, Numeric, String, Text, text
+from sqlalchemy import DateTime, Float, ForeignKey, Index, Integer, Numeric, String, Text, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.domain.models.approval import ApprovalStatus
 from app.domain.models.run import RunStatus, TriggerType
 from app.domain.models.run_event import EventType
 from app.infrastructure.database.connection import Base
@@ -147,6 +148,12 @@ class RunORM(Base):
         cascade="all, delete-orphan",
         order_by="PolicyDecisionORM.created_at",
     )
+    approvals: Mapped[list["ApprovalORM"]] = relationship(
+        "ApprovalORM",
+        back_populates="run",
+        cascade="all, delete-orphan",
+    )
+
 
 
     __table_args__ = (Index("ix_runs_repo_pr_status", "repo", "pr_number", "status"),)
@@ -334,4 +341,137 @@ class PolicyDecisionORM(Base):
     )
 
     run: Mapped["RunORM"] = relationship("RunORM", back_populates="policy_decisions")
+
+class ProviderHealthORM(Base):
+    """
+    Periodic health snapshot of upstream LLM providers for observability.
+    Captures error rates, latency trends, and circuit states over time.
+    """
+
+    __tablename__ = "provider_health"
+
+    id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid4,
+    )
+    provider: Mapped[str] = mapped_column(
+        String(64),
+        nullable=False,
+        index=True,
+        doc="Provider identifier (gemini, groq, nvidia_nim)",
+    )
+    model: Mapped[str] = mapped_column(
+        String(128),
+        nullable=False,
+        index=True,
+        doc="Target model name",
+    )
+    window_start: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        nullable=False,
+        index=True,
+    )
+    request_count: Mapped[int] = mapped_column(
+        Integer,
+        default=0,
+        nullable=False,
+    )
+    error_count: Mapped[int] = mapped_column(
+        Integer,
+        default=0,
+        nullable=False,
+    )
+    timeout_count: Mapped[int] = mapped_column(
+        Integer,
+        default=0,
+        nullable=False,
+    )
+    avg_latency_ms: Mapped[float] = mapped_column(
+        Float,
+        default=0.0,
+        nullable=False,
+    )
+    circuit_state: Mapped[str] = mapped_column(
+        String(32),
+        default="closed",
+        nullable=False,
+        doc="Circuit state: closed, open, half_open",
+    )
+
+    __table_args__ = (
+        Index("ix_provider_health_provider_window", "provider", "window_start"),
+    )
+
+
+class ApprovalORM(Base):
+    """
+    Persisted human approval queue request for sensitive or high-risk actions.
+    Tracks reviewer verdicts, serialized action intent, and decision traces.
+    """
+
+    __tablename__ = "approvals"
+
+    id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid4,
+    )
+    run_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("runs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    event_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("run_events.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    status: Mapped[str] = mapped_column(
+        String(32),
+        default=ApprovalStatus.PENDING.value,
+        nullable=False,
+        index=True,
+        doc="pending, approved, rejected, expired",
+    )
+    action_intent: Mapped[dict[str, Any]] = mapped_column(
+        JSONB,
+        nullable=False,
+        doc="Full ActionIntent serialized payload",
+    )
+    decision_trace: Mapped[dict[str, Any]] = mapped_column(
+        JSONB,
+        nullable=False,
+        server_default=text("'{}'::jsonb"),
+        doc="OPA rule match, risk score, and budget status trace",
+    )
+    requested_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        nullable=False,
+        index=True,
+    )
+    decided_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    decided_by: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+        doc="Username or email of the reviewer",
+    )
+    rejection_reason: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        doc="Rationale provided if rejected",
+    )
+
+    # Relationships
+    run: Mapped["RunORM"] = relationship("RunORM", back_populates="approvals")
+
+    __table_args__ = (
+        Index("ix_approvals_status_requested_at", "status", "requested_at"),
+    )
 

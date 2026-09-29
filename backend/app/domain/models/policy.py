@@ -106,9 +106,8 @@ class RiskThresholdConfig(BaseModel):
         description="Risk score at or above which the action is immediately denied",
     )
 
-
 class BudgetConfig(BaseModel):
-    """Token and financial cost limits for a run."""
+    """Token, financial cost, and invocation limits for a run."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -122,6 +121,12 @@ class BudgetConfig(BaseModel):
         ge=0.0,
         description="Maximum estimated cost in USD per run",
     )
+    max_llm_calls_per_run: int = Field(
+        default=25,
+        gt=0,
+        description="Maximum number of LLM API invocations allowed per run",
+    )
+
 
 
 class SensitiveActionTrigger(StrEnum):

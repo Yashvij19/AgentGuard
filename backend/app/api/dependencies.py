@@ -14,6 +14,7 @@ from app.infrastructure.database.repositories.event_repository import EventRepos
 from app.infrastructure.database.repositories.policy_repository import PolicyRepository
 from app.infrastructure.database.repositories.run_repository import RunRepository
 from app.infrastructure.database.repositories.webhook_repository import WebhookRepository
+from app.services.approval_service import ApprovalService
 from app.services.run_coordinator import RunCoordinator
 from app.services.webhook_service import WebhookService
 
@@ -73,3 +74,10 @@ def get_policy_repository(
 ) -> PolicyRepository:
     """FastAPI dependency yielding a session-scoped PolicyRepository."""
     return cont.get_policy_repository(session)
+
+def get_approval_service(
+    session: DbSessionDep,
+    cont: ContainerDep,
+) -> ApprovalService:
+    """FastAPI dependency yielding a session-scoped ApprovalService."""
+    return cont.get_approval_service(session)

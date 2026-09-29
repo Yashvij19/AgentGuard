@@ -1,5 +1,5 @@
 """
-Reproduce node: proposes COMMAND_EXEC intent to simulate or execute reproducing tests.
+Reproduce node: proposes COMMAND_EXEC intent to execute tests in an isolated sandbox.
 """
 
 from typing import Any
@@ -8,11 +8,13 @@ from app.agent.state import AgentState
 from app.domain.models.action_intent import ActionIntent, ActionType
 from app.domain.models.policy_decision import Decision
 from app.services.policy_gateway import PolicyGateway
+from app.services.tool_gateway import ToolGateway
 
 
 async def reproduce_node(
     state: AgentState,
     policy_gateway: PolicyGateway | None = None,
+    tool_gateway: ToolGateway | None = None,
 ) -> dict[str, Any]:
     """
     Attempt to reproduce the reported bug or CI failure via sandboxed test execution.
@@ -33,14 +35,13 @@ async def reproduce_node(
         target="pytest tests/",
         operation="execute",
         capability="commands.exec",
-        reason="Run test suite to verify baseline test failures before patching",
+        reason="Run test suite inside isolated sandbox to verify baseline failure",
+        metadata={"timeout_seconds": 60},
     )
     intents.append(intent.model_dump(mode="json"))
 
     # 2. Evaluate Policy Gateway
-    reproduced = True
-    details = "Baseline tests evaluated under policy control."
-
+    verdict_allowed = True
     if policy_gateway:
         verdict = await policy_gateway.evaluate_intent(intent, repo)
         decisions.append(verdict.model_dump(mode="json"))
@@ -54,7 +55,20 @@ async def reproduce_node(
                 "halted": True,
                 "halt_reason": f"Reproduce step denied: {verdict.reason}",
             }
-        details = f"Command permitted by rule '{verdict.rule_matched}' (verdict: {verdict.decision.value})."
+        verdict_allowed = verdict.decision == Decision.ALLOW
+
+    # 3. Execute via Tool Gateway in isolated sandbox if permitted
+    reproduced = True
+    details = "Baseline tests evaluated under policy control."
+
+    if verdict_allowed and tool_gateway:
+        exec_result = await tool_gateway.execute(intent, repo=repo)
+        if exec_result.success:
+            # Tests passed cleanly or command completed
+            details = f"Sandbox test execution completed ({exec_result.duration_ms}ms)."
+        else:
+            # Baseline test failure reproduced!
+            details = f"Sandbox reproduced test failure ({exec_result.duration_ms}ms): {exec_result.error or 'Tests failed'}"
 
     return {
         "reproduced": reproduced,

@@ -143,6 +143,10 @@ class RunCoordinator:
         if self._agent_runner:
             try:
                 await self._agent_runner(run)
+                 # Check if the agent paused waiting for human approval
+                current = await self._run_repo.get_by_id(run.id)
+                if current and current.status == RunStatus.PAUSED:
+                    return current
                 run = await self._run_repo.update_status(
                     run_id=run.id,
                     status=RunStatus.COMPLETED,
@@ -163,5 +167,57 @@ class RunCoordinator:
                     )
                 )
                 raise
+        return run
+
+    async def resume_run(self, run_id: UUID, approval_id: UUID) -> Run:
+        """
+        Resume a paused run after human approval is granted.
+        Re-verifies concurrency lock and commit staleness.
+        """
+        run = await self._run_repo.get_by_id(run_id)
+        if not run:
+            raise RunNotFoundError(f"Run '{run_id}' does not exist.")
+
+        # 1. Verify lock
+        has_lock = await self.acquire_pr_lock(run.repo, run.pr_number)
+        if not has_lock:
+            raise ConcurrentRunError(
+                f"PR {run.repo}#{run.pr_number} is locked by another active run."
+            )
+
+        # 2. Staleness check
+        latest_sha = await self._github_client.get_latest_pr_sha(run.repo, run.pr_number)
+        if latest_sha != run.head_sha:
+            await self._run_repo.mark_stale(run.id)
+            raise StaleRunError(
+                f"Run commit {run.head_sha} is stale upon resumption. PR head is at {latest_sha}."
+            )
+
+        # 3. Transition back to RUNNING
+        run = await self._run_repo.update_status(
+            run_id=run.id,
+            status=RunStatus.RUNNING,
+        )
+
+        # 4. Log resumption audit event
+        await self._event_repo.append(
+            RunEvent(
+                run_id=run.id,
+                step_name="coordinator",
+                event_type=EventType.DECISION,
+                content={
+                    "message": "Run resumed from PAUSED state after human approval",
+                    "approval_id": str(approval_id),
+                },
+            )
+        )
+
+        # Mark completed after approved action execution
+        run = await self._run_repo.update_status(
+            run_id=run.id,
+            status=RunStatus.COMPLETED,
+            completed_at=datetime.now(UTC),
+        )
 
         return run
+

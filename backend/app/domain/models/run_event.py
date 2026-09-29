@@ -16,6 +16,11 @@ class EventType(StrEnum):
     TOOL_CALL = "tool_call"
     POLICY_DECISION = "policy_decision"
     LLM_CALL = "llm_call"
+    APPROVAL_REQUESTED = "approval_requested"
+    APPROVAL_GRANTED = "approval_granted"
+    APPROVAL_REJECTED = "approval_rejected"
+    APPROVAL_EXPIRED = "approval_expired"
+
 
 
 class RunEvent(BaseModel):
