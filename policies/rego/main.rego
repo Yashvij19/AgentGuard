@@ -1,5 +1,7 @@
 package agentguard.policy
 
+import future.keywords
+
 import data.agentguard.policy.capabilities
 import data.agentguard.policy.commands
 import data.agentguard.policy.filesystem

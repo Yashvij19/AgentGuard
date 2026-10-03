@@ -1,6 +1,6 @@
 package agentguard.policy.capabilities
 
-import future.keywords.in
+import future.keywords
 
 # Capability is explicitly denied
 denied if {

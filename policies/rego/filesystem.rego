@@ -1,6 +1,6 @@
 package agentguard.policy.filesystem
 
-import future.keywords.in
+import future.keywords
 
 # Non-file actions are not constrained by filesystem rules
 allowed if {

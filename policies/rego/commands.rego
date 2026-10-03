@@ -1,6 +1,6 @@
 package agentguard.policy.commands
 
-import future.keywords.in
+import future.keywords
 
 # Non-command actions are not constrained by command rules
 allowed if {

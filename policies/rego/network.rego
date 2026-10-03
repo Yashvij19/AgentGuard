@@ -1,6 +1,6 @@
 package agentguard.policy.network
 
-import future.keywords.in
+import future.keywords
 
 # Non-network actions are not constrained by network rules
 allowed if {

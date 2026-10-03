@@ -1,6 +1,6 @@
 package agentguard.policy.sensitive
 
-import future.keywords.in
+import future.keywords
 
 # Escalates if action touches a sensitive file pattern
 requires_approval if {
