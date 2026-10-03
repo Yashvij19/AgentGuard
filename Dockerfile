@@ -23,7 +23,7 @@ COPY backend /app
 
 # Prepare entrypoint script
 COPY entrypoint.sh /app/entrypoint.sh
-RUN chmod +x /app/entrypoint.sh
+RUN sed -i 's/\r$//' /app/entrypoint.sh && chmod +x /app/entrypoint.sh
 
 # Expose FastAPI port
 EXPOSE 8000
