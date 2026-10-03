@@ -82,6 +82,11 @@ class WebhookService:
         # 4. Event Filtering & Dispatch
         if event_type == "pull_request" and payload.repository is not None:
             if payload.action in self.ALLOWED_PR_ACTIONS:
+                # Loop Prevention: Skip self-authored commits emitted by AgentGuard Bot
+                sender_login = (payload.sender.login if payload.sender else "").lower()
+                if sender_login.endswith("[bot]") or "agentguard" in sender_login:
+                    return None
+
                 if payload.pr_number is None or payload.head_sha is None:
                     raise WebhookValidationError("PR event missing PR number or head SHA.")
 

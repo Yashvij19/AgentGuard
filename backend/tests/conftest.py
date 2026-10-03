@@ -22,9 +22,7 @@ def mock_github_client() -> GitHubClient:
     client.get_pr_files = AsyncMock(return_value=["app/service.py"])
     client.get_file_content = AsyncMock(return_value="# file content")
     client.post_comment = AsyncMock(return_value=987654)
-    client.get_latest_pr_sha = AsyncMock(
-        return_value="6dcb09b5b57875f334f61aebed695e2e4193db5e"
-    )
+    client.get_latest_pr_sha = AsyncMock(return_value="6dcb09b5b57875f334f61aebed695e2e4193db5e")
     return client
 
 

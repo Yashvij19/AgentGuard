@@ -84,7 +84,6 @@ def mock_policy() -> AsyncMock:
     return gw
 
 
-
 @pytest.fixture
 def tool_gw(mock_github: AsyncMock, mock_sandbox: AsyncMock, mock_llm: AsyncMock) -> ToolGateway:
     return ToolGateway(
@@ -151,4 +150,3 @@ async def test_full_phase3_governed_workflow(
     # 5. Verify ToolGateway posted PR comment
     assert final_state.get("comment_id") == 101
     assert "AgentGuard Governance Review" in final_state.get("summary_report", "")
-

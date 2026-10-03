@@ -22,6 +22,10 @@ class RunStatus(StrEnum):
 class TriggerType(StrEnum):
     PULL_REQUEST = "pull_request"
     CHECK_SUITE = "check_suite"
+    SCHEDULE_HOURLY = "schedule.hourly"
+    SCHEDULE = "schedule"
+    WORKFLOW_DISPATCH = "workflow_dispatch"
+    MANUAL = "manual"
 
 
 class Run(BaseModel):

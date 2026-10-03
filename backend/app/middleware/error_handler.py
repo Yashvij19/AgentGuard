@@ -56,9 +56,7 @@ def register_error_handlers(app: FastAPI) -> None:
         )
 
     @app.exception_handler(RunNotFoundError)
-    async def run_not_found_handler(
-        request: Request, exc: RunNotFoundError
-    ) -> JSONResponse:
+    async def run_not_found_handler(request: Request, exc: RunNotFoundError) -> JSONResponse:
         """Requested run UUID does not exist."""
         return JSONResponse(
             status_code=404,
@@ -69,9 +67,7 @@ def register_error_handlers(app: FastAPI) -> None:
         )
 
     @app.exception_handler(ConcurrentRunError)
-    async def concurrent_run_handler(
-        request: Request, exc: ConcurrentRunError
-    ) -> JSONResponse:
+    async def concurrent_run_handler(request: Request, exc: ConcurrentRunError) -> JSONResponse:
         """Active run currently holds the lock for this pull request."""
         return JSONResponse(
             status_code=409,
@@ -82,9 +78,7 @@ def register_error_handlers(app: FastAPI) -> None:
         )
 
     @app.exception_handler(StaleRunError)
-    async def stale_run_handler(
-        request: Request, exc: StaleRunError
-    ) -> JSONResponse:
+    async def stale_run_handler(request: Request, exc: StaleRunError) -> JSONResponse:
         """PR commit head has superseded the run's target commit-SHA."""
         return JSONResponse(
             status_code=409,
@@ -95,9 +89,7 @@ def register_error_handlers(app: FastAPI) -> None:
         )
 
     @app.exception_handler(PolicyViolationError)
-    async def policy_violation_handler(
-        request: Request, exc: PolicyViolationError
-    ) -> JSONResponse:
+    async def policy_violation_handler(request: Request, exc: PolicyViolationError) -> JSONResponse:
         """Action was denied by policy engine."""
         return JSONResponse(
             status_code=403,
@@ -108,9 +100,7 @@ def register_error_handlers(app: FastAPI) -> None:
         )
 
     @app.exception_handler(BudgetExceededError)
-    async def budget_exceeded_handler(
-        request: Request, exc: BudgetExceededError
-    ) -> JSONResponse:
+    async def budget_exceeded_handler(request: Request, exc: BudgetExceededError) -> JSONResponse:
         """Run or action exceeded token/cost limits."""
         return JSONResponse(
             status_code=429,
@@ -121,11 +111,11 @@ def register_error_handlers(app: FastAPI) -> None:
         )
 
     @app.exception_handler(AgentGuardError)
-    async def general_domain_error_handler(
-        request: Request, exc: AgentGuardError
-    ) -> JSONResponse:
+    async def general_domain_error_handler(request: Request, exc: AgentGuardError) -> JSONResponse:
         """Catch-all for domain errors."""
-        logger.error("domain_error_occurred", error_type=exc.__class__.__name__, message=exc.message)
+        logger.error(
+            "domain_error_occurred", error_type=exc.__class__.__name__, message=exc.message
+        )
         return JSONResponse(
             status_code=500,
             content={
@@ -135,9 +125,7 @@ def register_error_handlers(app: FastAPI) -> None:
         )
 
     @app.exception_handler(Exception)
-    async def unhandled_exception_handler(
-        request: Request, exc: Exception
-    ) -> JSONResponse:
+    async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
         """Safety net for unhandled system exceptions."""
         logger.exception("unhandled_server_exception", error=str(exc))
         return JSONResponse(

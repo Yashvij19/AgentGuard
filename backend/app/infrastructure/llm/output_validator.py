@@ -43,7 +43,11 @@ class OutputValidator:
         if first_brace == -1 and first_bracket == -1:
             return text  # Return as-is, json.loads will raise appropriate error
 
-        start_idx = first_brace if (first_brace != -1 and (first_bracket == -1 or first_brace < first_bracket)) else first_bracket
+        start_idx = (
+            first_brace
+            if (first_brace != -1 and (first_bracket == -1 or first_brace < first_bracket))
+            else first_bracket
+        )
         is_brace = text[start_idx] == "{"
         target_char = "}" if is_brace else "]"
 

@@ -11,6 +11,7 @@ from app.domain.models.action_intent import ActionIntent
 
 class ExecutionResult(BaseModel):
     """Standardized result emitted by any tool execution."""
+
     success: bool
     output: Any = None
     error: str | None = None

@@ -28,6 +28,12 @@ class PolicyRepository:
         orm = result.scalar_one_or_none()
         return self._policy_to_domain(orm) if orm else None
 
+    async def list_all(self) -> list[Policy]:
+        """Fetch all stored repository policies."""
+        stmt = select(PolicyORM).order_by(PolicyORM.created_at.desc())
+        result = await self._session.execute(stmt)
+        return [self._policy_to_domain(row) for row in result.scalars().all()]
+
     async def save_policy(
         self,
         repo: str,

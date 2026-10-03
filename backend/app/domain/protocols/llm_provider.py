@@ -38,7 +38,6 @@ class LLMProvider(Protocol):
         """Primary or default model identifier for this provider."""
         ...
 
-
     async def generate(
         self,
         request: NormalizedRequest,

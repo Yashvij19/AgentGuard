@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field, field_validator
 
 class LLMProviderName(StrEnum):
     """Supported LLM provider plugin identifiers."""
+
     GEMINI = "gemini"
     GROQ = "groq"
     NVIDIA_NIM = "nvidia_nim"
@@ -24,6 +25,7 @@ class TaskType(StrEnum):
     Categorization of cognitive workloads.
     Enables task-based routing (e.g. reasoning -> Gemini, formatting -> Groq).
     """
+
     REASONING = "reasoning"
     CODE_GENERATION = "code_generation"
     CLASSIFICATION = "classification"
@@ -33,6 +35,7 @@ class TaskType(StrEnum):
 
 class RoutingStrategy(StrEnum):
     """Strategies for provider selection and failover."""
+
     TASK_BASED = "task_based"
     PRIMARY_FALLBACK = "primary_fallback"
     ROUND_ROBIN = "round_robin"
@@ -40,12 +43,14 @@ class RoutingStrategy(StrEnum):
 
 class TokenPricing(BaseModel):
     """Pricing configuration in USD per 1,000 tokens."""
+
     input_per_1k: Decimal = Field(default=Decimal("0.0"), ge=0)
     output_per_1k: Decimal = Field(default=Decimal("0.0"), ge=0)
 
 
 class LLMMessage(BaseModel):
     """Provider-agnostic chat message representation."""
+
     role: Literal["system", "user", "assistant"]
     content: str
 
@@ -55,6 +60,7 @@ class NormalizedRequest(BaseModel):
     Standardized payload format passed into any LLM provider adapter.
     Decouples provider-specific SDK schemas from the gateway core.
     """
+
     messages: list[LLMMessage]
     model: str
     temperature: float = Field(default=0.1, ge=0.0, le=2.0)
@@ -68,6 +74,7 @@ class NormalizedResponse(BaseModel):
     Standardized response returned by any LLM provider adapter.
     Includes full token and latency accounting for observability.
     """
+
     content: str
     model: str
     provider: LLMProviderName
@@ -81,6 +88,7 @@ class NormalizedResponse(BaseModel):
 
 class LLMResponse(BaseModel):
     """Client-facing response object from the LLM Gateway."""
+
     content: str
     model: str
     provider: LLMProviderName
@@ -94,6 +102,7 @@ class LLMResponse(BaseModel):
 
 class LLMProviderConfig(BaseModel):
     """Per-provider connection and behavioral configuration."""
+
     name: LLMProviderName
     api_key: str
     base_url: str | None = None
@@ -109,6 +118,7 @@ class LLMProviderConfig(BaseModel):
 
 class LLMGatewayConfig(BaseModel):
     """Global configuration governing multi-provider routing and resilience."""
+
     providers: dict[LLMProviderName, LLMProviderConfig]
     routing_strategy: RoutingStrategy = RoutingStrategy.TASK_BASED
     default_primary: LLMProviderName = LLMProviderName.GEMINI

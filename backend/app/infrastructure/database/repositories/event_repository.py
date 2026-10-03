@@ -48,7 +48,6 @@ class EventRepository:
     # Convenience alias matching repository naming conventions
     get_by_run_id = get_events_for_run
 
-
     @staticmethod
     def _to_domain(orm: RunEventORM) -> RunEvent:
         """Map internal SQLAlchemy ORM to pure domain RunEvent model."""

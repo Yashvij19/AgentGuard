@@ -28,14 +28,21 @@ from app.infrastructure.database.connection import (
 )
 from app.infrastructure.database.repositories.approval_repository import ApprovalRepository
 from app.infrastructure.database.repositories.event_repository import EventRepository
+from app.infrastructure.database.repositories.log_repository import LogRepository
 from app.infrastructure.database.repositories.policy_repository import PolicyRepository
+from app.infrastructure.database.repositories.provider_health_repository import (
+    ProviderHealthRepository,
+)
 from app.infrastructure.database.repositories.run_repository import RunRepository
 from app.infrastructure.database.repositories.webhook_repository import WebhookRepository
 from app.infrastructure.github.client import AsyncGitHubClient
+from app.services.system_logger import system_logger
+
 from app.infrastructure.llm.output_validator import OutputValidator
 from app.infrastructure.llm.providers.gemini_provider import GeminiProvider
 from app.infrastructure.llm.providers.groq_provider import GroqProvider
 from app.infrastructure.llm.providers.nvidia_nim_provider import NVIDIANIMProvider
+from app.infrastructure.llm.providers.openai_compat_provider import OpenAICompatProvider
 from app.infrastructure.notifications import NotificationGateway
 from app.infrastructure.policy.opa_client import OPAClient
 from app.infrastructure.policy.opa_evaluator import OPAEvaluator
@@ -81,6 +88,8 @@ class Container:
             github_client=self.github_client,
         )
         self._agent_runner_factory = agent_runner_factory or create_agent_runner
+        system_logger.set_session_factory(self.session_factory)
+
 
         # OPA Policy Engine components
         self.opa_client = OPAClient(base_url=self.settings.opa_url)
@@ -95,10 +104,22 @@ class Container:
         self.provider_registry = ProviderRegistry()
         configured_providers = self._register_default_llm_providers()
 
+        # Resolve primary and fallback from LLM_PROVIDERS_CONFIG or defaults
+        default_p_str = self.settings.llm_providers_config.get("default_primary", "gemini")
+        default_f_str = self.settings.llm_providers_config.get("default_fallback", "groq")
+        try:
+            default_primary = LLMProviderName(default_p_str)
+        except ValueError:
+            default_primary = LLMProviderName.GEMINI
+        try:
+            default_fallback = LLMProviderName(default_f_str)
+        except ValueError:
+            default_fallback = LLMProviderName.GROQ
+
         llm_gw_config = LLMGatewayConfig(
             providers=configured_providers,
-            default_primary=LLMProviderName.GEMINI,
-            default_fallback=LLMProviderName.GROQ,
+            default_primary=default_primary,
+            default_fallback=default_fallback,
             routing_strategy=RoutingStrategy.TASK_BASED,
         )
         self.llm_gateway = LLMGateway(
@@ -112,50 +133,79 @@ class Container:
             dashboard_base_url=self.settings.dashboard_base_url,
         )
 
-
     def _register_default_llm_providers(self) -> dict[LLMProviderName, LLMProviderConfig]:
         """Register configured LLM provider plugins into the ProviderRegistry and return config map."""
         configs: dict[LLMProviderName, LLMProviderConfig] = {}
+        json_providers = self.settings.llm_providers_config.get("providers", {})
 
         # 1. Gemini (Primary reasoning and code generation)
-        if self.settings.gemini_api_key:
+        gemini_key = self.settings.gemini_api_key or json_providers.get("gemini", {}).get("api_key")
+        if gemini_key:
+            g_json = json_providers.get("gemini", {})
+            g_models = g_json.get("models") or [m.strip() for m in self.settings.gemini_models.split(",") if m.strip()]
+            g_role = g_json.get("role", "primary")
             gemini_cfg = LLMProviderConfig(
                 name=LLMProviderName.GEMINI,
-                api_key=self.settings.gemini_api_key,
-                models=[m.strip() for m in self.settings.gemini_models.split(",") if m.strip()],
-                role="primary",
+                api_key=gemini_key,
+                models=g_models,
+                role=g_role,
                 task_types=[TaskType.REASONING, TaskType.CODE_GENERATION, TaskType.GENERAL],
             )
             self.provider_registry.register(GeminiProvider(config=gemini_cfg))
             configs[LLMProviderName.GEMINI] = gemini_cfg
 
         # 2. Groq (Fast classification and formatting)
-        if self.settings.groq_api_key:
+        groq_key = self.settings.groq_api_key or json_providers.get("groq", {}).get("api_key")
+        if groq_key:
+            gr_json = json_providers.get("groq", {})
+            gr_models = gr_json.get("models") or [m.strip() for m in self.settings.groq_models.split(",") if m.strip()]
+            gr_role = gr_json.get("role", "fallback")
             groq_cfg = LLMProviderConfig(
                 name=LLMProviderName.GROQ,
-                api_key=self.settings.groq_api_key,
-                base_url=self.settings.groq_base_url,
-                models=[m.strip() for m in self.settings.groq_models.split(",") if m.strip()],
-                role="fallback",
+                api_key=groq_key,
+                base_url=gr_json.get("base_url") or self.settings.groq_base_url,
+                models=gr_models,
+                role=gr_role,
                 task_types=[TaskType.CLASSIFICATION, TaskType.FORMATTING, TaskType.GENERAL],
             )
             self.provider_registry.register(GroqProvider(config=groq_cfg))
             configs[LLMProviderName.GROQ] = groq_cfg
 
         # 3. NVIDIA NIM (Fallback reasoning)
-        if self.settings.nvidia_nim_api_key:
+        nim_key = self.settings.nvidia_nim_api_key or json_providers.get("nvidia_nim", {}).get("api_key")
+        if nim_key:
+            nim_json = json_providers.get("nvidia_nim", {})
+            nim_models = nim_json.get("models") or [m.strip() for m in self.settings.nvidia_nim_models.split(",") if m.strip()]
+            nim_role = nim_json.get("role", "fallback")
             nim_cfg = LLMProviderConfig(
                 name=LLMProviderName.NVIDIA_NIM,
-                api_key=self.settings.nvidia_nim_api_key,
-                base_url=self.settings.nvidia_nim_base_url,
-                models=[m.strip() for m in self.settings.nvidia_nim_models.split(",") if m.strip()],
-                role="fallback",
+                api_key=nim_key,
+                base_url=nim_json.get("base_url") or self.settings.nvidia_nim_base_url,
+                models=nim_models,
+                role=nim_role,
                 task_types=[TaskType.REASONING, TaskType.CODE_GENERATION, TaskType.GENERAL],
             )
             self.provider_registry.register(NVIDIANIMProvider(config=nim_cfg))
             configs[LLMProviderName.NVIDIA_NIM] = nim_cfg
 
-        # 4. Fallback mock provider config if no API keys are provided in environment
+        # 4. OpenAI-Compatible (Local vLLM, Ollama, DeepSeek, or OpenAI)
+        openai_key = self.settings.openai_compat_api_key or json_providers.get("openai_compat", {}).get("api_key")
+        if openai_key:
+            oa_json = json_providers.get("openai_compat", {})
+            oa_models = oa_json.get("models") or [m.strip() for m in self.settings.openai_compat_models.split(",") if m.strip()]
+            oa_role = oa_json.get("role", "specialist")
+            openai_cfg = LLMProviderConfig(
+                name=LLMProviderName.OPENAI_COMPAT,
+                api_key=openai_key,
+                base_url=oa_json.get("base_url") or self.settings.openai_compat_base_url,
+                models=oa_models,
+                role=oa_role,
+                task_types=[TaskType.REASONING, TaskType.GENERAL],
+            )
+            self.provider_registry.register(OpenAICompatProvider(config=openai_cfg))
+            configs[LLMProviderName.OPENAI_COMPAT] = openai_cfg
+
+        # 5. Fallback mock provider config if no API keys are provided in environment
         if not configs:
             mock_cfg = LLMProviderConfig(
                 name=LLMProviderName.GEMINI,
@@ -236,7 +286,9 @@ class Container:
             tool_gateway,
             self.llm_gateway,
             approval_service,
+            run_repo,
         )
+
 
         return RunCoordinator(
             session=session,
@@ -261,6 +313,10 @@ class Container:
         """Assemble a request-scoped ApprovalRepository."""
         return ApprovalRepository(session=session)
 
+    def get_provider_health_repository(self, session: AsyncSession) -> ProviderHealthRepository:
+        """Create a request-scoped ProviderHealthRepository bound to the current session."""
+        return ProviderHealthRepository(session)
+
     def get_approval_service(self, session: AsyncSession) -> ApprovalService:
         """Assemble a request-scoped ApprovalService."""
         approval_repo = self.get_approval_repository(session)
@@ -274,7 +330,13 @@ class Container:
             event_repository=event_repo,
             tool_gateway=tool_gateway,
             notification_gateway=self.notification_gateway,
+            github_client=self.github_client,
         )
+
+    def get_log_repository(self, session: AsyncSession) -> LogRepository:
+        """Create a request-scoped LogRepository bound to the current session."""
+        return LogRepository(session)
+
 
 
     async def aclose(self) -> None:

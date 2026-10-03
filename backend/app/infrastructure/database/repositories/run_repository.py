@@ -2,10 +2,12 @@
 Repository for managing Run lifecycles and query operations.
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from decimal import Decimal
+from typing import Any
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.exceptions import RunNotFoundError
@@ -82,6 +84,27 @@ class RunRepository:
         await self._session.flush()
         return self._to_domain(orm)
 
+    async def add_tokens_and_cost(
+        self,
+        run_id: UUID,
+        tokens: int,
+        cost_usd: Decimal,
+    ) -> Run:
+        """Increment tokens and cost accounting for an active run."""
+        stmt = select(RunORM).where(RunORM.id == run_id)
+        result = await self._session.execute(stmt)
+        orm = result.scalar_one_or_none()
+        if not orm:
+            raise RunNotFoundError(f"Run '{run_id}' not found.")
+
+        orm.total_tokens = int(orm.total_tokens or 0) + tokens
+        orm.total_cost_usd = Decimal(str(orm.total_cost_usd or Decimal("0.0000"))) + cost_usd
+        orm.updated_at = datetime.now(UTC)
+
+        await self._session.flush()
+        return self._to_domain(orm)
+
+
     async def mark_stale(self, run_id: UUID) -> Run:
         """Mark an existing run as stale when a newer commit arrives."""
         return await self.update_status(
@@ -118,13 +141,23 @@ class RunRepository:
     @staticmethod
     def _to_domain(orm: RunORM) -> Run:
         """Convert SQLAlchemy RunORM to pure domain Run model."""
+        try:
+            trigger_type = TriggerType(orm.trigger_type)
+        except ValueError:
+            trigger_type = TriggerType.PULL_REQUEST
+
+        try:
+            status = RunStatus(orm.status)
+        except ValueError:
+            status = RunStatus.QUEUED
+
         return Run(
             id=orm.id,
             repo=orm.repo,
             pr_number=orm.pr_number,
             head_sha=orm.head_sha,
-            trigger_type=TriggerType(orm.trigger_type),
-            status=RunStatus(orm.status),
+            trigger_type=trigger_type,
+            status=status,
             policy_version=orm.policy_version,
             started_at=orm.started_at,
             completed_at=orm.completed_at,
@@ -133,3 +166,71 @@ class RunRepository:
             created_at=orm.created_at,
             updated_at=orm.updated_at,
         )
+
+    async def get_aggregate_stats(self) -> dict[str, Any]:
+        """Calculate high-level performance and cost metrics across all runs."""
+        stmt = select(
+            func.count(RunORM.id).label("total"),
+            func.count(RunORM.id)
+            .filter(RunORM.status == RunStatus.COMPLETED.value)
+            .label("completed"),
+            func.count(RunORM.id).filter(RunORM.status == RunStatus.FAILED.value).label("failed"),
+            func.count(RunORM.id).filter(RunORM.status == RunStatus.PAUSED.value).label("paused"),
+            func.coalesce(func.sum(RunORM.total_cost_usd), Decimal("0.000000")).label("total_cost"),
+            func.coalesce(func.sum(RunORM.total_tokens), 0).label("total_tokens"),
+        )
+        result = await self._session.execute(stmt)
+        row = result.one()
+        total = row.total or 0
+        completed = row.completed or 0
+        success_rate = (completed / total * 100.0) if total > 0 else 0.0
+        return {
+            "total_runs": total,
+            "completed_runs": completed,
+            "failed_runs": row.failed or 0,
+            "paused_runs": row.paused or 0,
+            "success_rate_percent": round(success_rate, 1),
+            "total_cost_usd": row.total_cost,
+            "total_tokens": int(row.total_tokens or 0),
+            "avg_duration_seconds": 0.0,
+        }
+
+    async def get_hourly_outcomes(self) -> list[dict[str, Any]]:
+        """
+        Aggregate runs over the last 24 hours into 12 2-hour rolling intervals.
+        Returns actual counts of completed, paused, and failed runs per bucket.
+        If no runs exist, returns zeroed buckets for the 12 time windows.
+        """
+        now = datetime.now(UTC)
+        cutoff = now - timedelta(hours=24)
+        stmt = select(RunORM).where(RunORM.created_at >= cutoff)
+        result = await self._session.execute(stmt)
+        runs = result.scalars().all()
+
+        current_even_hour = now.replace(minute=0, second=0, microsecond=0)
+        if current_even_hour.hour % 2 != 0:
+            current_even_hour -= timedelta(hours=1)
+
+        buckets: list[dict[str, Any]] = []
+        for i in range(11, -1, -1):
+            b_start = current_even_hour - timedelta(hours=2 * i)
+            b_end = b_start + timedelta(hours=2)
+            time_label = b_start.strftime("%H:00")
+
+            def is_in_bucket(r: RunORM, start: datetime = b_start, end: datetime = b_end) -> bool:
+                r_dt = r.created_at if r.created_at.tzinfo is not None else r.created_at.replace(tzinfo=UTC)
+                return start <= r_dt < end
+
+            comp = sum(1 for r in runs if is_in_bucket(r) and r.status == RunStatus.COMPLETED.value)
+            pause = sum(1 for r in runs if is_in_bucket(r) and r.status == RunStatus.PAUSED.value)
+            fail = sum(1 for r in runs if is_in_bucket(r) and r.status == RunStatus.FAILED.value)
+
+            buckets.append({
+                "time": time_label,
+                "completed": comp,
+                "paused": pause,
+                "failed": fail,
+                "active": (i == 0),
+            })
+
+        return buckets

@@ -81,3 +81,15 @@ class ProviderHealthRepository:
             avg_latency_ms=orm.avg_latency_ms,
             circuit_state=CircuitState(orm.circuit_state),
         )
+
+    async def get_all_latest(self) -> list[ProviderHealth]:
+        """Fetch the most recent health snapshot for every active provider."""
+        # Query distinct providers and fetch latest window
+        stmt = (
+            select(ProviderHealthORM)
+            .order_by(ProviderHealthORM.provider, desc(ProviderHealthORM.window_start))
+            .distinct(ProviderHealthORM.provider)
+        )
+        result = await self.session.execute(stmt)
+        orms = result.scalars().all()
+        return [self._to_domain(orm) for orm in orms]

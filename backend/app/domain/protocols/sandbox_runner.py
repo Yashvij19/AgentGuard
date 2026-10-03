@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 class SandboxResult(BaseModel):
     """Outcome of command execution inside an isolated environment."""
+
     exit_code: int
     stdout: str = ""
     stderr: str = ""

@@ -79,7 +79,9 @@ class ToolGateway(ToolExecutor):
 
                 # Hard deny check
                 if capability in cap_config.deny:
-                    logger.warning("tool_gateway_capability_denied", capability=capability, repo=repo)
+                    logger.warning(
+                        "tool_gateway_capability_denied", capability=capability, repo=repo
+                    )
                     return ExecutionResult(
                         success=False,
                         error=f"Capability '{capability}' is strictly forbidden by repository policy",
@@ -87,7 +89,11 @@ class ToolGateway(ToolExecutor):
 
                 # Approval gate check
                 if capability in cap_config.approval and not is_approved:
-                    logger.info("tool_gateway_capability_requires_approval", capability=capability, repo=repo)
+                    logger.info(
+                        "tool_gateway_capability_requires_approval",
+                        capability=capability,
+                        repo=repo,
+                    )
                     return ExecutionResult(
                         success=False,
                         error=f"Capability '{capability}' requires explicit human approval before execution",
@@ -107,7 +113,7 @@ class ToolGateway(ToolExecutor):
                     result = await self._dispatch_file_read(action_intent, repo)
 
                 case ActionType.FILE_WRITE:
-                    result = await self._dispatch_file_write(action_intent)
+                    result = await self._dispatch_file_write(action_intent, repo)
 
                 case ActionType.LLM_CALL:
                     result = await self._dispatch_llm_call(action_intent)
@@ -120,7 +126,9 @@ class ToolGateway(ToolExecutor):
 
         except Exception as err:
             duration_ms = int((time.monotonic() - start_time) * 1000)
-            logger.error("tool_gateway_dispatch_exception", error=str(err), action=action_intent.action)
+            logger.error(
+                "tool_gateway_dispatch_exception", error=str(err), action=action_intent.action
+            )
             result = ExecutionResult(
                 success=False,
                 error=f"Execution failed: {err}",
@@ -217,17 +225,123 @@ class ToolGateway(ToolExecutor):
             output=content,
         )
 
-    async def _dispatch_file_write(self, intent: ActionIntent) -> ExecutionResult:
-        """Record candidate patch diff to be applied to the PR."""
-        diff = intent.metadata.get("diff", "")
-        return ExecutionResult(
-            success=True,
-            output={
-                "target": intent.target,
-                "diff_length": len(diff),
-                "staged": True,
-            },
-        )
+    async def _dispatch_file_write(self, intent: ActionIntent, repo: str = "") -> ExecutionResult:
+        """
+        Apply and commit file changes to the pull request branch via GitHub API.
+        Extracts content from patch diff or direct payload, identifies branch SHA,
+        and pushes an atomic commit.
+        """
+        import re
+
+        target_file = intent.target.strip("/")
+        repo_name = repo or intent.metadata.get("repository", "")
+        pr_number = intent.metadata.get("pr_number")
+        diff_text = intent.metadata.get("diff", "") or intent.metadata.get("diff_unified", "")
+        new_content = intent.metadata.get("new_content")
+
+        # Extract file content from diff if not provided directly
+        if not new_content and diff_text:
+            cleaned = re.sub(r"^```[a-zA-Z0-9_-]*\n?", "", diff_text.strip(), flags=re.MULTILINE)
+            cleaned = re.sub(r"```$", "", cleaned.strip())
+            lines = cleaned.splitlines()
+            extracted = []
+            for line in lines:
+                if line.startswith("+++ ") or line.startswith("--- ") or line.startswith("@@"):
+                    continue
+                if line.startswith("+"):
+                    extracted.append(line[1:])
+                elif not line.startswith("-"):
+                    extracted.append(line)
+            new_content = "\n".join(extracted) + ("\n" if extracted else "")
+
+        if not self._github_client or not repo_name:
+            return ExecutionResult(
+                success=True,
+                output={
+                    "target": target_file,
+                    "diff_length": len(diff_text),
+                    "staged": True,
+                    "note": "File change staged (GitHubClient not configured for live commit)",
+                },
+            )
+
+        try:
+            # 1. Fetch branch name from PR
+            branch = intent.metadata.get("branch")
+            if not branch and pr_number:
+                pr_data = await self._github_client.get_pr(repo_name, int(pr_number))
+                branch = pr_data.get("head", {}).get("ref")
+
+            if not branch:
+                branch = "main"
+
+            # 2. Check if file already exists to get current blob SHA
+            existing_sha: str | None = None
+            try:
+                headers = await self._github_client._get_headers(repo=repo_name)
+                resp = await self._github_client._client.get(
+                    f"/repos/{repo_name}/contents/{target_file}",
+                    params={"ref": branch},
+                    headers=headers,
+                )
+                if resp.status_code == 200:
+                    existing_sha = resp.json().get("sha")
+            except Exception:
+                existing_sha = None
+
+            # 3. Create or update file commit via GitHub Contents API
+            commit_message = (
+                f"AgentGuard: Applied approved patch to {target_file}\n\n"
+                f"Reason: {intent.reason}\n"
+                f"Governed Run: {intent.run_id}"
+            )
+            commit_res = await self._github_client.create_or_update_file(
+                repo=repo_name,
+                path=target_file,
+                content=new_content or "# AgentGuard patch\n",
+                message=commit_message,
+                branch=branch,
+                sha=existing_sha,
+            )
+
+            commit_sha = commit_res.get("commit", {}).get("sha", "")
+            logger.info(
+                "tool_gateway_file_write_committed",
+                repo=repo_name,
+                target=target_file,
+                branch=branch,
+                commit_sha=commit_sha,
+            )
+
+            return ExecutionResult(
+                success=True,
+                output={
+                    "target": target_file,
+                    "branch": branch,
+                    "commit_sha": commit_sha,
+                    "staged": True,
+                    "committed": True,
+                },
+            )
+
+        except Exception as err:
+            err_msg = str(err)
+            logger.warning(
+                "tool_gateway_file_write_github_api_failed",
+                repo=repo_name,
+                target=target_file,
+                error=err_msg,
+            )
+            # If GitHub permissions fail (403), return success=False with clear action item
+            return ExecutionResult(
+                success=False,
+                error=(
+                    f"GitHub commit failed for {target_file}: {err_msg}. "
+                    "GitHub App definition has write permissions, but the repository installation has not approved them yet! "
+                    "Visit https://github.com/settings/installations to accept the updated permissions request (or reinstall at https://github.com/apps/agentguard-local-tester/installations/new)."
+                ),
+            )
+
 
     async def _dispatch_llm_call(self, intent: ActionIntent) -> ExecutionResult:
         """Forward LLM generation through the Unified LLM Gateway."""

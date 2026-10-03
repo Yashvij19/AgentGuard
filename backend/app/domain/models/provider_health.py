@@ -11,8 +11,9 @@ from pydantic import BaseModel, Field
 
 class CircuitState(StrEnum):
     """Three-state machine states for circuit breakers."""
-    CLOSED = "closed"        # Healthy: Normal operations permitted
-    OPEN = "open"            # Failing: Traffic halted, routed to fallback
+
+    CLOSED = "closed"  # Healthy: Normal operations permitted
+    OPEN = "open"  # Failing: Traffic halted, routed to fallback
     HALF_OPEN = "half_open"  # Recovery probe: Testing canary requests
 
 
@@ -21,6 +22,7 @@ class ProviderHealth(BaseModel):
     Snapshot of provider reliability metrics within a sliding time window.
     Persisted to database to power observability dashboards.
     """
+
     id: UUID = Field(default_factory=uuid4)
     provider: str
     model: str

@@ -142,6 +142,8 @@ def create_test_action_intent(
         metadata=metadata or {},
         created_at=datetime.now(UTC),
     )
+
+
 def create_test_policy_config() -> PolicyConfig:
     """Factory helper generating a standard PolicyConfig."""
     return PolicyConfig(
@@ -172,6 +174,8 @@ def create_test_policy_config() -> PolicyConfig:
             max_llm_calls_per_run=10,
         ),
     )
+
+
 def create_test_policy(repo: str = "octocat/Hello-World", version: int = 1) -> Policy:
     """Factory helper generating a domain Policy instance."""
     now = datetime.now(UTC)
@@ -184,6 +188,7 @@ def create_test_policy(repo: str = "octocat/Hello-World", version: int = 1) -> P
         created_at=now,
         updated_at=now,
     )
+
 
 def create_test_approval(
     run_id: UUID | None = None,

@@ -74,9 +74,7 @@ class GeminiProvider(BaseLLMProvider):
         }
 
         if system_instruction:
-            payload["system_instruction"] = {
-                "parts": [{"text": system_instruction}]
-            }
+            payload["system_instruction"] = {"parts": [{"text": system_instruction}]}
 
         try:
             response = await self._client.post(endpoint, json=payload, headers=headers)
@@ -89,9 +87,7 @@ class GeminiProvider(BaseLLMProvider):
 
         if response.is_error:
             error_body = response.text[:300]
-            raise LLMProviderError(
-                f"Gemini API returned HTTP {response.status_code}: {error_body}"
-            )
+            raise LLMProviderError(f"Gemini API returned HTTP {response.status_code}: {error_body}")
 
         data = response.json()
         try:
@@ -114,9 +110,7 @@ class GeminiProvider(BaseLLMProvider):
             return content, prompt_tokens, completion_tokens, finish_reason
 
         except (KeyError, IndexError) as err:
-            raise LLMProviderError(
-                f"Malformed response payload from Gemini: {data}"
-            ) from err
+            raise LLMProviderError(f"Malformed response payload from Gemini: {data}") from err
 
     async def health_check(self) -> bool:
         """Probe Gemini models list endpoint to confirm liveness and credentials."""

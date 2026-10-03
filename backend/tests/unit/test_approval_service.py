@@ -34,7 +34,9 @@ def mock_approval_repo() -> AsyncMock:
 @pytest.fixture
 def mock_run_repo() -> AsyncMock:
     repo = AsyncMock(spec=RunRepository)
-    repo.get_by_id = AsyncMock(side_effect=lambda run_id: create_test_run(run_id=run_id, status=RunStatus.RUNNING))
+    repo.get_by_id = AsyncMock(
+        side_effect=lambda run_id: create_test_run(run_id=run_id, status=RunStatus.RUNNING)
+    )
     repo.update_status = AsyncMock()
     return repo
 

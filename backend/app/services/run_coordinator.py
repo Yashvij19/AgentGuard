@@ -143,7 +143,7 @@ class RunCoordinator:
         if self._agent_runner:
             try:
                 await self._agent_runner(run)
-                 # Check if the agent paused waiting for human approval
+                # Check if the agent paused waiting for human approval
                 current = await self._run_repo.get_by_id(run.id)
                 if current and current.status == RunStatus.PAUSED:
                     return current
@@ -220,4 +220,3 @@ class RunCoordinator:
         )
 
         return run
-

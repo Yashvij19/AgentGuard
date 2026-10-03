@@ -12,6 +12,9 @@ from app.container import Container, container
 from app.infrastructure.database.connection import get_db_session
 from app.infrastructure.database.repositories.event_repository import EventRepository
 from app.infrastructure.database.repositories.policy_repository import PolicyRepository
+from app.infrastructure.database.repositories.provider_health_repository import (
+    ProviderHealthRepository,
+)
 from app.infrastructure.database.repositories.run_repository import RunRepository
 from app.infrastructure.database.repositories.webhook_repository import WebhookRepository
 from app.services.approval_service import ApprovalService
@@ -75,9 +78,18 @@ def get_policy_repository(
     """FastAPI dependency yielding a session-scoped PolicyRepository."""
     return cont.get_policy_repository(session)
 
+
 def get_approval_service(
     session: DbSessionDep,
     cont: ContainerDep,
 ) -> ApprovalService:
     """FastAPI dependency yielding a session-scoped ApprovalService."""
     return cont.get_approval_service(session)
+
+
+def get_provider_health_repository(
+    session: DbSessionDep,
+    cont: ContainerDep,
+) -> ProviderHealthRepository:
+    """FastAPI dependency yielding a session-scoped ProviderHealthRepository."""
+    return cont.get_provider_health_repository(session)

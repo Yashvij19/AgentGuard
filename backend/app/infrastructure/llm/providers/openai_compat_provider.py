@@ -62,9 +62,7 @@ class OpenAICompatProvider(BaseLLMProvider):
                 f"Timeout ({self.config.timeout_seconds}s) connecting to {self.name} at {endpoint}"
             ) from err
         except httpx.RequestError as err:
-            raise LLMProviderError(
-                f"Network error connecting to {self.name}: {err}"
-            ) from err
+            raise LLMProviderError(f"Network error connecting to {self.name}: {err}") from err
 
         if response.is_error:
             error_body = response.text[:300]
@@ -81,9 +79,7 @@ class OpenAICompatProvider(BaseLLMProvider):
             completion_tokens = usage.get("completion_tokens", 0)
             return content, prompt_tokens, completion_tokens, finish_reason
         except (KeyError, IndexError) as err:
-            raise LLMProviderError(
-                f"Malformed response payload from {self.name}: {data}"
-            ) from err
+            raise LLMProviderError(f"Malformed response payload from {self.name}: {data}") from err
 
     async def health_check(self) -> bool:
         """Probe the endpoint using a models list call or basic ping."""

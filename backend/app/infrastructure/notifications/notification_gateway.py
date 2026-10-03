@@ -90,7 +90,11 @@ class NotificationGateway:
                         "url": review_url,
                         "color": 15105570,  # Orange
                         "fields": [
-                            {"name": "Repository", "value": f"`{repo}#{pr_number}`", "inline": True},
+                            {
+                                "name": "Repository",
+                                "value": f"`{repo}#{pr_number}`",
+                                "inline": True,
+                            },
                             {"name": "Risk Score", "value": f"`{risk_score}/100`", "inline": True},
                             {"name": "Action", "value": f"`{action}`", "inline": True},
                             {"name": "Target", "value": f"`{target}`", "inline": False},
@@ -113,7 +117,9 @@ class NotificationGateway:
         """
         Dispatch update notification when an approval is resolved (approved or rejected).
         """
-        status_label = "✅ Approved" if approval.status == ApprovalStatus.APPROVED else "❌ Rejected"
+        status_label = (
+            "✅ Approved" if approval.status == ApprovalStatus.APPROVED else "❌ Rejected"
+        )
         color = 3066993 if approval.status == ApprovalStatus.APPROVED else 15158332  # Green vs Red
 
         success = True
@@ -132,8 +138,16 @@ class NotificationGateway:
                         "title": f"Approval {status_label}",
                         "color": color,
                         "fields": [
-                            {"name": "Repository", "value": f"`{repo}#{pr_number}`", "inline": True},
-                            {"name": "Decided By", "value": f"`{approval.decided_by}`", "inline": True},
+                            {
+                                "name": "Repository",
+                                "value": f"`{repo}#{pr_number}`",
+                                "inline": True,
+                            },
+                            {
+                                "name": "Decided By",
+                                "value": f"`{approval.decided_by}`",
+                                "inline": True,
+                            },
                         ],
                         "footer": {"text": f"Approval ID: {approval.id}"},
                     }

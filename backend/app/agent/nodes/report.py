@@ -52,11 +52,12 @@ async def report_node(
         f"Automated PR review and governance audit completed for **{len(changed_files)} changed files**.",
         f"**Run Status**: `{status_str}`",
         f"**Governed Action Intents**: `{len(intents)} total` ({allowed_count} Allowed, {approval_count} Approval Required, {denied_count} Denied)",
-
         f"**Patch Status**: `{'Proposed' if state.get('patch') else 'None'}` | **Verified**: `{'Yes' if state.get('verified') else 'No'}`",
     ]
     if is_paused:
-        summary_lines.append(f"⏸️ **Action Paused**: Review required via `/api/approvals/{state.get('pending_approval_id', '')}`")
+        summary_lines.append(
+            f"⏸️ **Action Paused**: Review required via `/api/approvals/{state.get('pending_approval_id', '')}`"
+        )
     summary = "\n".join(summary_lines)
     findings = state.get("investigation", "No findings available.")
 

@@ -20,7 +20,10 @@ async def verify_node(
     Run the test suite against the patched codebase in an isolated sandbox.
     """
     if state.get("halted") or not state.get("patch"):
-        return {"verified": False, "verification_details": "Skipped: run was halted or no patch was generated."}
+        return {
+            "verified": False,
+            "verification_details": "Skipped: run was halted or no patch was generated.",
+        }
 
     repo = state["repo"]
     run_id = state["run_id"]

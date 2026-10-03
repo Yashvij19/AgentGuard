@@ -24,7 +24,9 @@ class HealthResponse(BaseModel):
     database: str = Field(..., description="'connected' or 'disconnected'")
     app_env: str = Field(..., description="Active deployment environment")
     version: str = Field(default="0.1.0", description="AgentGuard backend version")
-    pool: dict[str, Any] = Field(default_factory=dict, description="Database connection pool statistics")
+    pool: dict[str, Any] = Field(
+        default_factory=dict, description="Database connection pool statistics"
+    )
 
 
 @router.get(

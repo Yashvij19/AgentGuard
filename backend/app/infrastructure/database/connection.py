@@ -45,6 +45,13 @@ def create_engine_instance() -> AsyncEngine:
     # Strip query parameters that asyncpg handles via connect_args to prevent connection errors
     clean_url = settings.database_url.split("?")[0]
 
+    # Strictly enforce PostgreSQL with asyncpg
+    if not clean_url.startswith("postgresql"):
+        raise ValueError(
+            "AgentGuard strictly requires PostgreSQL with the asyncpg driver (postgresql+asyncpg://...).\n"
+            f"Received invalid database URL: '{settings.database_url}'."
+        )
+
     return create_async_engine(
         clean_url,
         echo=(settings.app_env == "development" and settings.log_level == "DEBUG"),

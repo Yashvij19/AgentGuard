@@ -36,7 +36,6 @@ def test_action_intent_is_immutable() -> None:
         intent.target = "malicious_path"  # type: ignore[misc]
 
 
-
 def test_action_intent_validation_empty_strings() -> None:
     """ActionIntent must reject empty target, operation, or capability strings."""
     run_id = uuid4()

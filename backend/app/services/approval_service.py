@@ -4,6 +4,7 @@ Orchestrates the Human-in-the-Loop approval lifecycle: requesting approval,
 pausing runs, executing approved actions, and handling rejections or expirations.
 """
 
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
@@ -15,10 +16,12 @@ from app.domain.models.approval import Approval, ApprovalDecisionResult, Approva
 from app.domain.models.policy_decision import PolicyDecision
 from app.domain.models.run import RunStatus
 from app.domain.models.run_event import EventType, RunEvent
+from app.domain.protocols.github_client import GitHubClient
 from app.infrastructure.database.repositories.approval_repository import ApprovalRepository
 from app.infrastructure.database.repositories.event_repository import EventRepository
 from app.infrastructure.database.repositories.run_repository import RunRepository
 from app.infrastructure.notifications.notification_gateway import NotificationGateway
+from app.services.system_logger import system_logger
 from app.services.tool_gateway import ToolGateway
 
 logger = structlog.get_logger(__name__)
@@ -37,12 +40,14 @@ class ApprovalService:
         event_repository: EventRepository,
         tool_gateway: ToolGateway | None = None,
         notification_gateway: NotificationGateway | None = None,
+        github_client: GitHubClient | None = None,
     ) -> None:
         self._approval_repo = approval_repository
         self._run_repo = run_repository
         self._event_repo = event_repository
         self._tool_gateway = tool_gateway
         self._notification_gw = notification_gateway
+        self._github_client = github_client
 
     async def request_approval(
         self,
@@ -78,11 +83,24 @@ class ApprovalService:
         saved_event = await self._event_repo.append(event)
 
         # Create approval record
+        intent_dict = action_intent.model_dump(mode="json")
+        intent_dict["repository"] = run.repo
+        intent_dict["pr_number"] = run.pr_number
+        intent_dict["target_path"] = action_intent.target
+        diff = action_intent.metadata.get("diff", "")
+        if diff.startswith("```diff"):
+            diff = diff[len("```diff"):].strip()
+        if diff.startswith("```"):
+            diff = diff[len("```"):].strip()
+        if diff.endswith("```"):
+            diff = diff[:-3].strip()
+        intent_dict["diff_unified"] = diff
+
         approval = Approval(
             run_id=run_id,
             event_id=saved_event.id,
             status=ApprovalStatus.PENDING,
-            action_intent=action_intent.model_dump(mode="json"),
+            action_intent=intent_dict,
             decision_trace=decision.model_dump(mode="json"),
         )
         created_approval = await self._approval_repo.create(approval)
@@ -139,7 +157,7 @@ class ApprovalService:
             )
         )
 
-        # Transition run back to RUNNING
+        # Transition run back to RUNNING during execution
         await self._run_repo.update_status(run_id=approval.run_id, status=RunStatus.RUNNING)
 
         # Execute approved action via ToolGateway
@@ -156,12 +174,71 @@ class ApprovalService:
             executed = result.success
             exec_result = result.model_dump(mode="json")
 
+        # Complete run execution lifecycle
+        final_status = RunStatus.COMPLETED if (not execute_action or executed) else RunStatus.FAILED
+        await self._run_repo.update_status(
+            run_id=approval.run_id,
+            status=final_status,
+            completed_at=datetime.now(UTC),
+        )
+
+        exec_error = exec_result.get("error") if (exec_result and not executed) else None
+
+        await self._event_repo.append(
+            RunEvent(
+                run_id=approval.run_id,
+                step_name="approval_service",
+                event_type=EventType.DECISION,
+                content={
+                    "message": "Run transitioned to COMPLETED following human operator authorization"
+                    if final_status == RunStatus.COMPLETED
+                    else "Run transitioned to FAILED following execution failure",
+                    "approval_id": str(approval_id),
+                    "action_executed": executed,
+                    "error": exec_error,
+                    "exec_result": exec_result,
+                },
+            )
+        )
+
+        try:
+            await system_logger.log(
+                level="ERROR" if not executed else "INFO",
+                message=f"Human operator approved action. Execution {'succeeded' if executed else 'FAILED: ' + str(exec_error or '')}",
+                source="approval_service",
+                api_name="approve_action",
+                task_progress="Phase 6/6: Execution & Post-Flight",
+                commit_sha=run.head_sha,
+                pr_number=run.pr_number,
+                repo=run.repo,
+                run_id=run.id,
+                status="FAIL" if not executed else "PASS",
+                extra={"approval_id": str(approval_id), "decided_by": decided_by, "exec_result": exec_result},
+            )
+        except Exception:
+            pass
+
+        # Publish GitHub commit status check if client available
+        if self._github_client and run.head_sha:
+            try:
+                await self._github_client.create_commit_status(
+                    repo=run.repo,
+                    sha=run.head_sha,
+                    state="success" if final_status == RunStatus.COMPLETED else "failure",
+                    description="AgentGuard: Dual-custody approval granted and executed"
+                    if final_status == RunStatus.COMPLETED
+                    else "AgentGuard: Approved action execution encountered errors",
+                )
+            except Exception:
+                pass
+
         logger.info(
             "approval_granted",
             approval_id=str(approval_id),
             run_id=str(approval.run_id),
             decided_by=decided_by,
             action_executed=executed,
+            final_status=final_status.value,
         )
         if self._notification_gw:
             await self._notification_gw.send_approval_resolved_alert(
@@ -169,7 +246,6 @@ class ApprovalService:
                 repo=run.repo,
                 pr_number=run.pr_number,
             )
-
 
         return ApprovalDecisionResult(
             approval_id=approval_id,
@@ -191,6 +267,7 @@ class ApprovalService:
         Reject a pending action.
         1. Transitions approval to REJECTED with optional reason.
         2. Logs EventType.APPROVAL_REJECTED to Action Ledger.
+        3. Transitions run to FAILED.
         """
         approval = await self._approval_repo.update_decision(
             approval_id=approval_id,
@@ -201,6 +278,14 @@ class ApprovalService:
         run = await self._run_repo.get_by_id(approval.run_id)
         if not run:
             raise RunNotFoundError(f"Run '{approval.run_id}' not found.")
+
+        # Mark run failed
+        await self._run_repo.update_status(
+            run_id=approval.run_id,
+            status=RunStatus.FAILED,
+            completed_at=datetime.now(UTC),
+        )
+
 
         # Log rejection audit event
         await self._event_repo.append(
@@ -230,7 +315,6 @@ class ApprovalService:
                 repo=run.repo,
                 pr_number=run.pr_number,
             )
-
 
         return ApprovalDecisionResult(
             approval_id=approval_id,

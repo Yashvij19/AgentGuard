@@ -55,7 +55,6 @@ class BaseLLMProvider(ABC):
         """Return the primary configured model for this provider."""
         return self.config.models[0]
 
-
     @abstractmethod
     async def _call_provider(
         self,
@@ -84,7 +83,9 @@ class BaseLLMProvider(ABC):
         """
         start_time = time.perf_counter()
 
-        content, prompt_tokens, completion_tokens, finish_reason = await self._call_provider(request)
+        content, prompt_tokens, completion_tokens, finish_reason = await self._call_provider(
+            request
+        )
 
         latency_ms = int((time.perf_counter() - start_time) * 1000)
 

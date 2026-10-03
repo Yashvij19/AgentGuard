@@ -111,15 +111,19 @@ async def test_full_hitl_pause_approve_resume_flow(
     mock_run_repo.update_status = AsyncMock(side_effect=_update_status)
 
     mock_event_repo = AsyncMock(spec=EventRepository)
+
     async def _append_event(event):
         stored_events.append(event)
         return event
+
     mock_event_repo.append = AsyncMock(side_effect=_append_event)
 
     mock_approval_repo = AsyncMock(spec=ApprovalRepository)
+
     async def _create_approval(approval):
         stored_approvals[approval.id] = approval
         return approval
+
     mock_approval_repo.create = AsyncMock(side_effect=_create_approval)
     mock_approval_repo.get_by_id = AsyncMock(side_effect=lambda aid: stored_approvals.get(aid))
 
@@ -138,6 +142,7 @@ async def test_full_hitl_pause_approve_resume_flow(
 
     # Policy Gateway: Sensitive write requires approval
     mock_policy_gw = AsyncMock(spec=PolicyGateway)
+
     async def _evaluate_intent(intent, repo):
         if intent.action == ActionType.FILE_WRITE:
             return PolicyDecision(
@@ -242,12 +247,12 @@ async def test_full_hitl_pause_approve_resume_flow(
 
     # ToolGateway now executed the sensitive write under explicit human authorization
     file_write_calls = [
-        c for c in mock_tool_gw.execute.call_args_list
+        c
+        for c in mock_tool_gw.execute.call_args_list
         if _extract_intent(c).action == ActionType.FILE_WRITE
     ]
     assert len(file_write_calls) == 1
     assert file_write_calls[0].kwargs.get("is_approved") is True
-
 
     # 4. Coordinator Resumes Run
     mock_session = AsyncMock()

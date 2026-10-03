@@ -46,12 +46,30 @@ async def patch_node(
                 f"Investigation Findings:\n{investigation[:500]}\n\n"
                 "Synthesize a minimal unified git diff to resolve this issue."
             )
-            llm_resp = await llm_gateway.generate(prompt=prompt, task_type=TaskType.CODE_GENERATION)
-            patch_diff = llm_resp.content
+            llm_resp = await llm_gateway.generate(
+                prompt=prompt,
+                task_type=TaskType.CODE_GENERATION,
+                run_id=run_id,
+            )
+            patch_diff = llm_resp.content.strip()
+            if patch_diff.startswith("```diff"):
+                patch_diff = patch_diff[len("```diff"):].strip()
+            if patch_diff.startswith("```"):
+                patch_diff = patch_diff[len("```"):].strip()
+            if patch_diff.endswith("```"):
+                patch_diff = patch_diff[:-3].strip()
+            patch_tokens = llm_resp.total_tokens
+            patch_cost = float(llm_resp.estimated_cost_usd)
+
         except Exception:
             patch_diff = f"--- a/{target_file}\n+++ b/{target_file}\n@@ -1,3 +1,4 @@\n+# Automated patch applied by AgentGuard\n"
+            patch_tokens = 0
+            patch_cost = 0.0
     else:
         patch_diff = f"--- a/{target_file}\n+++ b/{target_file}\n@@ -1,3 +1,4 @@\n+# Automated patch applied by AgentGuard\n"
+        patch_tokens = 0
+        patch_cost = 0.0
+
 
     # 2. Propose FILE_WRITE intent
     intent = ActionIntent(
@@ -61,7 +79,13 @@ async def patch_node(
         operation="modify",
         capability="github.create_commit",
         reason=f"Apply candidate patch to resolve regression in {target_file}",
-        metadata={"diff": patch_diff},
+        metadata={
+            "diff": patch_diff,
+            "diff_unified": patch_diff,
+            "target_path": target_file,
+            "repository": repo,
+            "pr_number": state.get("pr_number"),
+        },
     )
     intents.append(intent.model_dump(mode="json"))
 
@@ -80,26 +104,27 @@ async def patch_node(
                 "halt_reason": f"Code modification denied on {target_file}: {verdict.reason}",
             }
         if verdict.decision == Decision.REQUIRE_APPROVAL:
-                pending_id: str | None = None
-                if approval_service:
-                    approval = await approval_service.request_approval(
-                        run_id=run_id,
-                        action_intent=intent,
-                        decision=verdict,
-                    )
-                    pending_id = str(approval.id)
-                return {
-                    "action_intents": intents,
-                    "policy_decisions": decisions,
-                    "patch": patch_diff,
-                    "patch_file": target_file,
-                    "paused": True,
-                    "pending_approval_id": pending_id,
-                    "pause_reason": f"Code modification on {target_file} requires human approval: {verdict.reason}",
-                    "halted": True,
-                    "halt_reason": f"Code modification on {target_file} requires human approval: {verdict.reason}",
-                }
-
+            pending_id: str | None = None
+            if approval_service:
+                approval = await approval_service.request_approval(
+                    run_id=run_id,
+                    action_intent=intent,
+                    decision=verdict,
+                )
+                pending_id = str(approval.id)
+            return {
+                "action_intents": intents,
+                "policy_decisions": decisions,
+                "patch": patch_diff,
+                "patch_file": target_file,
+                "paused": True,
+                "pending_approval_id": pending_id,
+                "pause_reason": f"Code modification on {target_file} requires human approval: {verdict.reason}",
+                "halted": True,
+                "halt_reason": f"Code modification on {target_file} requires human approval: {verdict.reason}",
+                "total_tokens": int(state.get("total_tokens", 0)) + patch_tokens,
+                "total_cost": float(state.get("total_cost", 0.0)) + patch_cost,
+            }
 
     # 4. Stage patch via ToolGateway
     if tool_gateway:
@@ -110,4 +135,8 @@ async def patch_node(
         "patch_file": target_file,
         "action_intents": intents,
         "policy_decisions": decisions,
+        "total_tokens": int(state.get("total_tokens", 0)) + patch_tokens,
+        "total_cost": float(state.get("total_cost", 0.0)) + patch_cost,
     }
+
+

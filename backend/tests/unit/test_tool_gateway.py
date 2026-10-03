@@ -181,6 +181,4 @@ async def test_tool_gateway_dispatches_github_comment(
 
     assert result.success
     assert result.output["comment_id"] == 999
-    mock_github_client.post_comment.assert_called_once_with(
-        "octocat/Hello-World", 42, "LGTM!"
-    )
+    mock_github_client.post_comment.assert_called_once_with("octocat/Hello-World", 42, "LGTM!")

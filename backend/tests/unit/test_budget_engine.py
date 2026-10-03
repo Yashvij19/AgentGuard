@@ -82,9 +82,7 @@ async def test_preemptive_cost_exceeded(mock_run_repo: AsyncMock) -> None:
 
 
 @pytest.mark.asyncio
-async def test_max_llm_calls_exceeded(
-    mock_run_repo: AsyncMock, mock_event_repo: AsyncMock
-) -> None:
+async def test_max_llm_calls_exceeded(mock_run_repo: AsyncMock, mock_event_repo: AsyncMock) -> None:
     run = create_test_run()
     mock_run_repo.get_by_id.return_value = run
 

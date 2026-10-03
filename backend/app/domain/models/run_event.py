@@ -22,7 +22,6 @@ class EventType(StrEnum):
     APPROVAL_EXPIRED = "approval_expired"
 
 
-
 class RunEvent(BaseModel):
     """An immutable audit trail event logged during run execution."""
 

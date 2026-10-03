@@ -107,7 +107,9 @@ async def test_get_runs_and_run_detail(test_client: AsyncClient) -> None:
 
     mock_run_repo = AsyncMock(spec=RunRepository)
     mock_run_repo.list_runs = AsyncMock(return_value=[run_1])
-    mock_run_repo.get_by_id = AsyncMock(side_effect=lambda r_id: run_1 if r_id == run_1.id else None)
+    mock_run_repo.get_by_id = AsyncMock(
+        side_effect=lambda r_id: run_1 if r_id == run_1.id else None
+    )
 
     mock_event_repo = AsyncMock(spec=EventRepository)
     mock_event_repo.get_events_for_run = AsyncMock(return_value=[event_1])

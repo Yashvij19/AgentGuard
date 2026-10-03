@@ -17,8 +17,6 @@ from app.domain.protocols.sandbox_runner import SandboxResult, SandboxRunner
 logger = structlog.get_logger(__name__)
 
 
-
-
 class E2BSandboxRunner(SandboxRunner):
     """
     Executes commands inside ephemeral E2B sandboxes using async HTTP REST client.
@@ -32,7 +30,6 @@ class E2BSandboxRunner(SandboxRunner):
         http_client: httpx.AsyncClient | None = None,
         template_id: str = "base",
     ) -> None:
-
         """
         Initialize the E2B runner with credentials and template ID.
         Args:
@@ -51,7 +48,7 @@ class E2BSandboxRunner(SandboxRunner):
     @property
     def is_mock_mode(self) -> bool:
         """True if running in mock/offline mode without a live E2B cloud token."""
-        return not self._api_key or self._api_key in ("mock", "test", "disabled")
+        return not self._api_key or self._api_key in ("mock", "test", "disabled", "dummy_e2b_key")
 
     async def run_command(
         self,
@@ -178,7 +175,9 @@ class E2BSandboxRunner(SandboxRunner):
                     )
                     logger.debug("e2b_sandbox_destroyed", sandbox_id=sandbox_id)
                 except Exception as cleanup_err:
-                    logger.warning("e2b_sandbox_cleanup_failed", sandbox_id=sandbox_id, error=str(cleanup_err))
+                    logger.warning(
+                        "e2b_sandbox_cleanup_failed", sandbox_id=sandbox_id, error=str(cleanup_err)
+                    )
 
     async def health_check(self) -> bool:
         """Check availability of the E2B service endpoint."""

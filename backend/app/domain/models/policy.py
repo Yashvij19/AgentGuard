@@ -17,15 +17,27 @@ class CapabilityConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     allow: list[str] = Field(
-        default_factory=list,
+        default_factory=lambda: [
+            "github.read_file",
+            "github.read_pr",
+            "github.comment_pr",
+            "commands.exec",
+        ],
         description="Capabilities allowed to execute autonomously",
     )
     approval: list[str] = Field(
-        default_factory=list,
+        default_factory=lambda: [
+            "github.create_commit",
+            "github.create_pr",
+        ],
         description="Capabilities requiring human approval before execution",
     )
     deny: list[str] = Field(
-        default_factory=list,
+        default_factory=lambda: [
+            "github.delete_repository",
+            "github.manage_webhooks",
+            "github.admin",
+        ],
         description="Capabilities strictly forbidden from executing",
     )
 
@@ -36,11 +48,11 @@ class FilesystemConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     read: list[str] = Field(
-        default_factory=lambda: ["**/*"],
+        default_factory=lambda: ["**", "**/*"],
         description="Glob patterns for files the agent is permitted to read",
     )
     write: list[str] = Field(
-        default_factory=list,
+        default_factory=lambda: ["**", "**/*"],
         description="Glob patterns for files the agent is permitted to modify or create",
     )
 
@@ -51,11 +63,22 @@ class CommandConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     allow: list[str] = Field(
-        default_factory=list,
+        default_factory=lambda: [
+            "^pytest.*",
+            "^poetry run pytest.*",
+            "^npm test.*",
+            "^ruff check.*",
+            "^python.*",
+        ],
         description="Regex or prefix patterns for permitted shell commands",
     )
     deny: list[str] = Field(
-        default_factory=list,
+        default_factory=lambda: [
+            ".*rm -rf.*",
+            ".*curl.*|.*sh",
+            ".*wget.*|.*sh",
+            ".*git push.*--force.*",
+        ],
         description="Regex or prefix patterns for strictly forbidden commands",
     )
 
@@ -66,7 +89,10 @@ class NetworkConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     allowed_domains: list[str] = Field(
-        default_factory=list,
+        default_factory=lambda: [
+            "api.github.com",
+            "pypi.org",
+        ],
         description="Permitted outbound HTTP/API destination domains",
     )
 
@@ -106,6 +132,7 @@ class RiskThresholdConfig(BaseModel):
         description="Risk score at or above which the action is immediately denied",
     )
 
+
 class BudgetConfig(BaseModel):
     """Token, financial cost, and invocation limits for a run."""
 
@@ -126,7 +153,6 @@ class BudgetConfig(BaseModel):
         gt=0,
         description="Maximum number of LLM API invocations allowed per run",
     )
-
 
 
 class SensitiveActionTrigger(StrEnum):
@@ -207,6 +233,7 @@ class Policy(BaseModel):
     """
     Persisted policy entity representing a repository's governance configuration.
     """
+
     model_config = ConfigDict(frozen=True)
     id: UUID = Field(
         default_factory=uuid4,

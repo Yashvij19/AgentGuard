@@ -7,20 +7,22 @@ from decimal import ROUND_HALF_UP, Decimal
 
 from app.domain.models.llm_config import LLMProviderName, TokenPricing
 
-# Pricing table in USD per 1,000 tokens (Free-tier reference rates + standard API rates)
+# Pricing table in USD per 1,000 tokens (Commercial API benchmark rates)
 DEFAULT_PRICING_TABLE: dict[LLMProviderName, TokenPricing] = {
-    # Free-tier quotas modeled with nominal rates for budget simulation
+    # Google Gemini 2.5 Flash / 1.5 Flash ($0.15 / 1M prompt, $0.60 / 1M completion)
     LLMProviderName.GEMINI: TokenPricing(
-        input_per_1k=Decimal("0.0000"),
-        output_per_1k=Decimal("0.0000"),
+        input_per_1k=Decimal("0.00015"),
+        output_per_1k=Decimal("0.00060"),
     ),
+    # Groq LLaMA 3.3 70B ($0.59 / 1M prompt, $0.79 / 1M completion)
     LLMProviderName.GROQ: TokenPricing(
-        input_per_1k=Decimal("0.0000"),
-        output_per_1k=Decimal("0.0000"),
+        input_per_1k=Decimal("0.00059"),
+        output_per_1k=Decimal("0.00079"),
     ),
+    # NVIDIA NIM Nemotron / DeepSeek ($0.20 / 1M prompt, $0.60 / 1M completion)
     LLMProviderName.NVIDIA_NIM: TokenPricing(
-        input_per_1k=Decimal("0.0000"),
-        output_per_1k=Decimal("0.0000"),
+        input_per_1k=Decimal("0.00020"),
+        output_per_1k=Decimal("0.00060"),
     ),
     # Generic fallback commercial baseline ($0.15 / $0.60 per 1M tokens)
     LLMProviderName.OPENAI_COMPAT: TokenPricing(

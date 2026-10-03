@@ -44,6 +44,11 @@ class AgentState(TypedDict, total=False):
     pending_approval_id: str | None
     pause_reason: str | None
 
+    # Metrics & Accounting
+    total_tokens: int
+    total_cost: float
+
     # Error & Metadata Tracking
     error: str | None
     metadata: dict[str, Any]
+

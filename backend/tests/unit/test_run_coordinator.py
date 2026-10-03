@@ -21,9 +21,15 @@ from tests.factories import create_test_run
 def mock_run_repo() -> AsyncMock:
     repo = AsyncMock(spec=RunRepository)
     repo.create = AsyncMock(side_effect=lambda r: r)
-    repo.update_status = AsyncMock(side_effect=lambda run_id, status, **kw: create_test_run(run_id=run_id, status=status))
-    repo.mark_stale = AsyncMock(side_effect=lambda run_id: create_test_run(run_id=run_id, status=RunStatus.STALE))
-    repo.get_by_id = AsyncMock(side_effect=lambda run_id: create_test_run(run_id=run_id, status=RunStatus.QUEUED))
+    repo.update_status = AsyncMock(
+        side_effect=lambda run_id, status, **kw: create_test_run(run_id=run_id, status=status)
+    )
+    repo.mark_stale = AsyncMock(
+        side_effect=lambda run_id: create_test_run(run_id=run_id, status=RunStatus.STALE)
+    )
+    repo.get_by_id = AsyncMock(
+        side_effect=lambda run_id: create_test_run(run_id=run_id, status=RunStatus.QUEUED)
+    )
     return repo
 
 

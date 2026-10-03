@@ -17,5 +17,5 @@ __all__ = [
     "RunRepository",
     "EventRepository",
     "PolicyRepository",
-    "ProviderHealthRepository"
+    "ProviderHealthRepository",
 ]

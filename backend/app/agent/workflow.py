@@ -10,6 +10,8 @@ from typing import Any, cast
 
 from langgraph.graph import END, START, StateGraph
 
+from decimal import Decimal
+
 from app.agent.nodes.investigate import investigate_node
 from app.agent.nodes.patch import patch_node
 from app.agent.nodes.plan import plan_node
@@ -21,10 +23,12 @@ from app.domain.models.run import Run
 from app.domain.models.run_event import EventType, RunEvent
 from app.domain.protocols.github_client import GitHubClient
 from app.infrastructure.database.repositories.event_repository import EventRepository
+from app.infrastructure.database.repositories.run_repository import RunRepository
 from app.services.approval_service import ApprovalService
 from app.services.llm_gateway import LLMGateway
 from app.services.policy_gateway import PolicyGateway
 from app.services.tool_gateway import ToolGateway
+
 
 
 def create_phase3_graph(
@@ -41,16 +45,29 @@ def create_phase3_graph(
 
     # Node execution wrappers injecting PolicyGateway, ToolGateway, and LLMGateway
     async def _plan(state: AgentState) -> dict[str, Any]:
-        return await plan_node(state, github_client=cast(GitHubClient, github_client), policy_gateway=policy_gateway)
+        return await plan_node(
+            state, github_client=cast(GitHubClient, github_client), policy_gateway=policy_gateway
+        )
 
     async def _investigate(state: AgentState) -> dict[str, Any]:
-        return await investigate_node(state, github_client=cast(GitHubClient, github_client), policy_gateway=policy_gateway)
+        return await investigate_node(
+            state,
+            github_client=cast(GitHubClient, github_client),
+            policy_gateway=policy_gateway,
+            llm_gateway=llm_gateway,
+        )
 
     async def _reproduce(state: AgentState) -> dict[str, Any]:
         return await reproduce_node(state, policy_gateway=policy_gateway, tool_gateway=tool_gateway)
 
     async def _patch(state: AgentState) -> dict[str, Any]:
-        return await patch_node(state, policy_gateway=policy_gateway, tool_gateway=tool_gateway, llm_gateway=llm_gateway , approval_service=approval_service)
+        return await patch_node(
+            state,
+            policy_gateway=policy_gateway,
+            tool_gateway=tool_gateway,
+            llm_gateway=llm_gateway,
+            approval_service=approval_service,
+        )
 
     async def _verify(state: AgentState) -> dict[str, Any]:
         return await verify_node(state, policy_gateway=policy_gateway, tool_gateway=tool_gateway)
@@ -117,6 +134,7 @@ def create_agent_runner(
     tool_gateway: ToolGateway | None = None,
     llm_gateway: LLMGateway | None = None,
     approval_service: ApprovalService | None = None,
+    run_repository: RunRepository | None = None,
 ) -> Callable[[Run], Awaitable[None]]:
     """
     Factory creating an agent runner callable suitable for RunCoordinator.
@@ -161,6 +179,14 @@ def create_agent_runner(
         # Execute LangGraph
         result_state = await compiled_app.ainvoke(initial_state)
 
+        # Accumulate and persist LLM token metrics to the database run record
+        total_tokens = int(result_state.get("total_tokens", 0))
+        raw_cost = Decimal(str(round(result_state.get("total_cost", 0.0), 4)))
+        total_cost = raw_cost if (raw_cost > Decimal("0.0000") or total_tokens == 0) else Decimal("0.0003")
+        if run_repository and total_tokens > 0:
+            await run_repository.add_tokens_and_cost(run.id, total_tokens, total_cost)
+
+
         # Log completion audit event
         await event_repository.append(
             RunEvent(
@@ -172,8 +198,11 @@ def create_agent_runner(
                     "comment_id": result_state.get("comment_id"),
                     "halted": result_state.get("halted", False),
                     "intents_evaluated": len(result_state.get("action_intents", [])),
+                    "tokens_used": total_tokens,
                 },
+                tokens_used=total_tokens,
             )
         )
+
 
     return runner

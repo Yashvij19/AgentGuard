@@ -18,6 +18,7 @@ def _mock_record_decision(decision: PolicyDecision, *args: Any, **kwargs: Any) -
     """Explicitly typed side_effect helper for PolicyRepository.record_decision."""
     return decision
 
+
 @pytest.mark.asyncio
 async def test_policy_gateway_all_pass_returns_allow() -> None:
     """When OPA, Risk, and Budget all approve, final decision is ALLOW."""

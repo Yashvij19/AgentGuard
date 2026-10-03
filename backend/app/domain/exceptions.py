@@ -75,6 +75,7 @@ class LLMAllProvidersFailedError(LLMProviderError):
 class SandboxExecutionError(AgentGuardError):
     """Raised when execution in E2B or GitHub Actions sandbox fails."""
 
+
 # Approval Errors
 class ApprovalNotFoundError(AgentGuardError):
     """Raised when a requested approval does not exist."""
@@ -82,4 +83,3 @@ class ApprovalNotFoundError(AgentGuardError):
 
 class InvalidApprovalStateError(AgentGuardError):
     """Raised when attempting an invalid status transition on an approval."""
-

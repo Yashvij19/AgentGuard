@@ -8,21 +8,27 @@ allowed if {
 }
 
 # Command explicitly matches a deny regex
-denied if {
+explicitly_denied if {
     input.action_intent.action == "COMMAND_EXEC"
     some pattern in data.policy.commands.deny
     regex.match(pattern, input.action_intent.target)
 }
 
-# Command matches an allow regex (and is not denied)
+# Command matches an allow regex (and is not explicitly denied)
 allowed if {
     input.action_intent.action == "COMMAND_EXEC"
-    not denied
+    not explicitly_denied
     some pattern in data.policy.commands.allow
     regex.match(pattern, input.action_intent.target)
 }
 
-# Denied if it is a command execution and not explicitly allowed
+# Denied if explicitly denied
+denied if {
+    input.action_intent.action == "COMMAND_EXEC"
+    explicitly_denied
+}
+
+# Denied if it is a command execution and not allowed
 denied if {
     input.action_intent.action == "COMMAND_EXEC"
     not allowed

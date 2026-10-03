@@ -38,7 +38,9 @@ class RequestNormalizer:
         return messages
 
     @staticmethod
-    def build_gemini_contents(request: NormalizedRequest) -> tuple[str | None, list[dict[str, Any]]]:
+    def build_gemini_contents(
+        request: NormalizedRequest,
+    ) -> tuple[str | None, list[dict[str, Any]]]:
         """
         Format NormalizedRequest messages into Google Gemini content structures.
         Returns a tuple: (system_instruction, contents).
@@ -49,10 +51,12 @@ class RequestNormalizer:
         for msg in request.messages:
             # Gemini maps 'assistant' role to 'model'
             role = "model" if msg.role == "assistant" else "user"
-            contents.append({
-                "role": role,
-                "parts": [{"text": msg.content}],
-            })
+            contents.append(
+                {
+                    "role": role,
+                    "parts": [{"text": msg.content}],
+                }
+            )
 
         return system_instruction, contents
 

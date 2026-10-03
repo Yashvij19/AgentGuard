@@ -29,7 +29,9 @@ from app.services.provider_registry import ProviderRegistry
 class MockProvider(BaseLLMProvider):
     """Test double implementing BaseLLMProvider for deterministic unit testing."""
 
-    def __init__(self, name: LLMProviderName, task_types: list[TaskType], model: str = "test-model") -> None:
+    def __init__(
+        self, name: LLMProviderName, task_types: list[TaskType], model: str = "test-model"
+    ) -> None:
         config = LLMProviderConfig(
             name=name,
             api_key="mock_key",
@@ -85,7 +87,7 @@ def gateway_setup() -> tuple[LLMGateway, MockProvider, MockProvider]:
 
 @pytest.mark.asyncio
 async def test_routing_routes_by_task_type(
-    gateway_setup: tuple[LLMGateway, MockProvider, MockProvider]
+    gateway_setup: tuple[LLMGateway, MockProvider, MockProvider],
 ) -> None:
     gateway, gemini, groq = gateway_setup
 
@@ -107,7 +109,7 @@ async def test_routing_routes_by_task_type(
 
 @pytest.mark.asyncio
 async def test_failover_when_primary_fails(
-    gateway_setup: tuple[LLMGateway, MockProvider, MockProvider]
+    gateway_setup: tuple[LLMGateway, MockProvider, MockProvider],
 ) -> None:
     gateway, gemini, groq = gateway_setup
 
@@ -127,7 +129,7 @@ async def test_failover_when_primary_fails(
 
 @pytest.mark.asyncio
 async def test_failover_skips_provider_if_circuit_is_open(
-    gateway_setup: tuple[LLMGateway, MockProvider, MockProvider]
+    gateway_setup: tuple[LLMGateway, MockProvider, MockProvider],
 ) -> None:
     gateway, gemini, groq = gateway_setup
 
@@ -147,7 +149,7 @@ async def test_failover_skips_provider_if_circuit_is_open(
 
 @pytest.mark.asyncio
 async def test_structured_generation_with_self_healing_repair(
-    gateway_setup: tuple[LLMGateway, MockProvider, MockProvider]
+    gateway_setup: tuple[LLMGateway, MockProvider, MockProvider],
 ) -> None:
     gateway, gemini, _ = gateway_setup
 
@@ -171,7 +173,7 @@ async def test_structured_generation_with_self_healing_repair(
 
 @pytest.mark.asyncio
 async def test_all_providers_failed_raises_exception(
-    gateway_setup: tuple[LLMGateway, MockProvider, MockProvider]
+    gateway_setup: tuple[LLMGateway, MockProvider, MockProvider],
 ) -> None:
     gateway, gemini, groq = gateway_setup
 

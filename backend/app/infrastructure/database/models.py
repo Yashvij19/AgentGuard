@@ -3,12 +3,25 @@ SQLAlchemy 2.0 ORM models for AgentGuard.
 Defines persistent schema for runs, webhook idempotency, and audit trails.
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+
 from decimal import Decimal
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, Float, ForeignKey, Index, Integer, Numeric, String, Text, text
+from sqlalchemy import (
+    JSON,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    Numeric,
+    String,
+    Text,
+    Uuid,
+    text,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -17,6 +30,10 @@ from app.domain.models.approval import ApprovalStatus
 from app.domain.models.run import RunStatus, TriggerType
 from app.domain.models.run_event import EventType
 from app.infrastructure.database.connection import Base
+
+# Dual-dialect compatibility: Native PG on PostgreSQL/Neon, JSON/Uuid fallback on SQLite
+JSON_TYPE = JSONB().with_variant(JSON(), "sqlite")
+UUID_TYPE = PG_UUID(as_uuid=True).with_variant(Uuid(as_uuid=True), "sqlite")
 
 
 class WebhookDeliveryORM(Base):
@@ -28,7 +45,7 @@ class WebhookDeliveryORM(Base):
     __tablename__ = "webhook_deliveries"
 
     id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True),
+        UUID_TYPE,
         primary_key=True,
         default=uuid4,
     )
@@ -45,13 +62,13 @@ class WebhookDeliveryORM(Base):
         doc="GitHub event type e.g. pull_request, check_suite",
     )
     payload_summary: Mapped[dict[str, Any]] = mapped_column(
-        JSONB,
+        JSON_TYPE,
         nullable=False,
-        server_default=text("'{}'::jsonb"),
+        server_default=text("'{}'"),
         doc="Summary metadata of the payload for debugging",
     )
     run_id: Mapped[UUID | None] = mapped_column(
-        PG_UUID(as_uuid=True),
+        UUID_TYPE,
         ForeignKey("runs.id", ondelete="SET NULL"),
         nullable=True,
     )
@@ -70,7 +87,7 @@ class RunORM(Base):
     __tablename__ = "runs"
 
     id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True),
+        UUID_TYPE,
         primary_key=True,
         default=uuid4,
     )
@@ -141,7 +158,7 @@ class RunORM(Base):
         cascade="all, delete-orphan",
         order_by="RunEventORM.created_at",
     )
-        # Add this relationship to RunORM
+    # Add this relationship to RunORM
     policy_decisions: Mapped[list["PolicyDecisionORM"]] = relationship(
         "PolicyDecisionORM",
         back_populates="run",
@@ -154,8 +171,6 @@ class RunORM(Base):
         cascade="all, delete-orphan",
     )
 
-
-
     __table_args__ = (Index("ix_runs_repo_pr_status", "repo", "pr_number", "status"),)
 
 
@@ -167,12 +182,12 @@ class RunEventORM(Base):
     __tablename__ = "run_events"
 
     id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True),
+        UUID_TYPE,
         primary_key=True,
         default=uuid4,
     )
     run_id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True),
+        UUID_TYPE,
         ForeignKey("runs.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
@@ -188,9 +203,9 @@ class RunEventORM(Base):
         default=EventType.DECISION.value,
     )
     content: Mapped[dict[str, Any]] = mapped_column(
-        JSONB,
+        JSON_TYPE,
         nullable=False,
-        server_default=text("'{}'::jsonb"),
+        server_default=text("'{}'"),
     )
     tokens_used: Mapped[int] = mapped_column(
         Integer,
@@ -210,6 +225,7 @@ class RunEventORM(Base):
 
     run: Mapped["RunORM"] = relationship("RunORM", back_populates="events")
 
+
 class PolicyORM(Base):
     """
     Persisted security policy configuration per repository with version history.
@@ -218,7 +234,7 @@ class PolicyORM(Base):
     __tablename__ = "policies"
 
     id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True),
+        UUID_TYPE,
         primary_key=True,
         default=uuid4,
     )
@@ -240,9 +256,9 @@ class PolicyORM(Base):
         doc="Compiled Rego policy bundle or compiled data document",
     )
     parsed_content: Mapped[dict[str, Any]] = mapped_column(
-        JSONB,
+        JSON_TYPE,
         nullable=False,
-        server_default=text("'{}'::jsonb"),
+        server_default=text("'{}'"),
         doc="Parsed and validated policy JSON representation",
     )
     version: Mapped[int] = mapped_column(
@@ -273,26 +289,26 @@ class PolicyDecisionORM(Base):
     __tablename__ = "policy_decisions"
 
     id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True),
+        UUID_TYPE,
         primary_key=True,
         default=uuid4,
     )
     run_id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True),
+        UUID_TYPE,
         ForeignKey("runs.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
     action_intent_id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True),
+        UUID_TYPE,
         nullable=False,
         index=True,
         doc="UUID of the ActionIntent that was evaluated",
     )
     action_requested: Mapped[dict[str, Any]] = mapped_column(
-        JSONB,
+        JSON_TYPE,
         nullable=False,
-        server_default=text("'{}'::jsonb"),
+        server_default=text("'{}'"),
         doc="Snapshot of the ActionIntent payload evaluated",
     )
     rule_matched: Mapped[str | None] = mapped_column(
@@ -329,9 +345,9 @@ class PolicyDecisionORM(Base):
         doc="Human-readable rationale for verdict",
     )
     details: Mapped[dict[str, Any]] = mapped_column(
-        JSONB,
+        JSON_TYPE,
         nullable=False,
-        server_default=text("'{}'::jsonb"),
+        server_default=text("'{}'"),
         doc="Auxiliary diagnostic data from policy evaluation",
     )
     created_at: Mapped[datetime] = mapped_column(
@@ -342,6 +358,7 @@ class PolicyDecisionORM(Base):
 
     run: Mapped["RunORM"] = relationship("RunORM", back_populates="policy_decisions")
 
+
 class ProviderHealthORM(Base):
     """
     Periodic health snapshot of upstream LLM providers for observability.
@@ -351,7 +368,7 @@ class ProviderHealthORM(Base):
     __tablename__ = "provider_health"
 
     id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True),
+        UUID_TYPE,
         primary_key=True,
         default=uuid4,
     )
@@ -400,9 +417,7 @@ class ProviderHealthORM(Base):
         doc="Circuit state: closed, open, half_open",
     )
 
-    __table_args__ = (
-        Index("ix_provider_health_provider_window", "provider", "window_start"),
-    )
+    __table_args__ = (Index("ix_provider_health_provider_window", "provider", "window_start"),)
 
 
 class ApprovalORM(Base):
@@ -414,18 +429,18 @@ class ApprovalORM(Base):
     __tablename__ = "approvals"
 
     id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True),
+        UUID_TYPE,
         primary_key=True,
         default=uuid4,
     )
     run_id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True),
+        UUID_TYPE,
         ForeignKey("runs.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
     event_id: Mapped[UUID | None] = mapped_column(
-        PG_UUID(as_uuid=True),
+        UUID_TYPE,
         ForeignKey("run_events.id", ondelete="SET NULL"),
         nullable=True,
     )
@@ -437,14 +452,14 @@ class ApprovalORM(Base):
         doc="pending, approved, rejected, expired",
     )
     action_intent: Mapped[dict[str, Any]] = mapped_column(
-        JSONB,
+        JSON_TYPE,
         nullable=False,
         doc="Full ActionIntent serialized payload",
     )
     decision_trace: Mapped[dict[str, Any]] = mapped_column(
-        JSONB,
+        JSON_TYPE,
         nullable=False,
-        server_default=text("'{}'::jsonb"),
+        server_default=text("'{}'"),
         doc="OPA rule match, risk score, and budget status trace",
     )
     requested_at: Mapped[datetime] = mapped_column(
@@ -471,7 +486,106 @@ class ApprovalORM(Base):
     # Relationships
     run: Mapped["RunORM"] = relationship("RunORM", back_populates="approvals")
 
+    __table_args__ = (Index("ix_approvals_status_requested_at", "status", "requested_at"),)
+
+
+class SystemLogORM(Base):
+    """
+    Developer and runtime audit system logs for AgentGuard execution, API calls, and tool actions.
+    Provides complete transparency for developers with per-SHA filtering and 24-hour auto-expiration.
+    """
+
+    __tablename__ = "system_logs"
+
+    id: Mapped[UUID] = mapped_column(
+        UUID_TYPE,
+        primary_key=True,
+        default=uuid4,
+    )
+    timestamp: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        nullable=False,
+        index=True,
+    )
+    level: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        default="INFO",
+        index=True,
+        doc="INFO, WARNING, ERROR, DEBUG",
+    )
+    source: Mapped[str] = mapped_column(
+        String(64),
+        nullable=False,
+        index=True,
+        doc="policy_gateway, tool_gateway, github_client, llm_gateway, coordinator, approval_service, webhook",
+    )
+    api_name: Mapped[str | None] = mapped_column(
+        String(128),
+        nullable=True,
+        doc="API endpoint or operation name",
+    )
+    message: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        doc="Human-readable developer log message",
+    )
+    task_progress: Mapped[str | None] = mapped_column(
+        String(128),
+        nullable=True,
+        doc="Progress milestone, e.g. Step 12/17: Tool Execution",
+    )
+    status: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        default="PASS",
+        index=True,
+        doc="PASS, FAIL, WAITING, RUNNING",
+    )
+    commit_sha: Mapped[str | None] = mapped_column(
+        String(64),
+        nullable=True,
+        index=True,
+        doc="Git commit SHA for filtering by PR/head commit",
+    )
+    pr_number: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+        index=True,
+    )
+    repo: Mapped[str | None] = mapped_column(
+        String(256),
+        nullable=True,
+        index=True,
+    )
+    run_id: Mapped[UUID | None] = mapped_column(
+        UUID_TYPE,
+        nullable=True,
+        index=True,
+    )
+    latency_ms: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+    )
+    extra_info: Mapped[dict[str, Any]] = mapped_column(
+        JSON_TYPE,
+        nullable=False,
+        default=dict,
+        server_default=text("'{}'"),
+        doc="Structured developer JSON metadata with full execution details",
+    )
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC) + timedelta(days=1),
+        index=True,
+        doc="Auto-cleanup threshold: records expire after 24 hours",
+    )
+
     __table_args__ = (
-        Index("ix_approvals_status_requested_at", "status", "requested_at"),
+        Index("ix_system_logs_sha_time", "commit_sha", "timestamp"),
+        Index("ix_system_logs_expires", "expires_at"),
     )
 

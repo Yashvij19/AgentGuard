@@ -114,7 +114,9 @@ async def test_get_pending_for_run(repo: ApprovalRepository, mock_session: Async
 
 
 @pytest.mark.asyncio
-async def test_list_pending_with_repo_filter(repo: ApprovalRepository, mock_session: AsyncMock) -> None:
+async def test_list_pending_with_repo_filter(
+    repo: ApprovalRepository, mock_session: AsyncMock
+) -> None:
     app1 = create_test_approval(status=ApprovalStatus.PENDING)
 
     mock_result = MagicMock()
@@ -127,7 +129,9 @@ async def test_list_pending_with_repo_filter(repo: ApprovalRepository, mock_sess
 
 
 @pytest.mark.asyncio
-async def test_update_decision_to_approved(repo: ApprovalRepository, mock_session: AsyncMock) -> None:
+async def test_update_decision_to_approved(
+    repo: ApprovalRepository, mock_session: AsyncMock
+) -> None:
     approval = create_test_approval(status=ApprovalStatus.PENDING)
     orm = _make_orm_from_domain(approval)
 
@@ -148,7 +152,9 @@ async def test_update_decision_to_approved(repo: ApprovalRepository, mock_sessio
 
 
 @pytest.mark.asyncio
-async def test_update_decision_not_found_raises(repo: ApprovalRepository, mock_session: AsyncMock) -> None:
+async def test_update_decision_not_found_raises(
+    repo: ApprovalRepository, mock_session: AsyncMock
+) -> None:
     mock_result = MagicMock()
     mock_result.scalar_one_or_none.return_value = None
     mock_session.execute.return_value = mock_result
