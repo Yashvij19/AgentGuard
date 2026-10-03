@@ -63,3 +63,11 @@ Thumbs.db
 *.swp
 *.swo
 *~
+
+# 8. Internal Architecture & Planning Specs (Local only)
+AgentGuard_SDD (1).md
+implementation_plan.md
+PROJECT_TRACKER.md
+design-prompt.md
+animation-spec.md
+
