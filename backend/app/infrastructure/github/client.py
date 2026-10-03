@@ -107,7 +107,13 @@ class AsyncGitHubClient(GitHubClient):
             "exp": now + (10 * 60),  # Valid for 10 minutes
             "iss": self.app_id,
         }
-        token = jwt.encode(payload, self.private_key, algorithm="RS256")
+        raw_key = self.private_key.strip()
+        if not raw_key.startswith("-----BEGIN"):
+            raise ValueError(
+                f"GitHub private key is invalid. Expected PEM header '-----BEGIN ...', but received: '{raw_key[:40]}...'. "
+                "If using a file path, ensure the file is mounted with -v $(pwd)/github_key.pem:/app/github_key.pem:ro."
+            )
+        token = jwt.encode(payload, raw_key, algorithm="RS256")
         return token if isinstance(token, str) else token.decode("utf-8")
 
     async def get_pr_diff(self, repo: str, pr_number: int) -> str:

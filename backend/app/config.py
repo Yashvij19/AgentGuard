@@ -145,12 +145,20 @@ class Settings(BaseSettings):
     @field_validator("github_private_key")
     @classmethod
     def format_private_key(cls, v: str) -> str:
-        """Support unescaping literal \\n or loading key directly from a .pem file path."""
+        """Support unescaping literal \n or loading key directly from a .pem file path."""
         import os
         cleaned = v.strip().strip('"').strip("'")
-        if (cleaned.endswith(".pem") or cleaned.endswith(".key")) and os.path.exists(cleaned):
+        if cleaned.endswith(".pem") or cleaned.endswith(".key") or cleaned.startswith("/") or cleaned.startswith("./"):
+            if not os.path.exists(cleaned):
+                raise ValueError(
+                    f"GitHub private key file specified at '{cleaned}' was not found inside the container! "
+                    "Make sure the file exists and is mounted with -v $(pwd)/github_key.pem:/app/github_key.pem:ro."
+                )
             with open(cleaned, "r", encoding="utf-8") as f:
-                return f.read()
+                content = f.read().strip()
+                if not content:
+                    raise ValueError(f"GitHub private key file at '{cleaned}' is empty!")
+                return content
         return cleaned.replace("\\n", "\n")
 
     def get_llm_gateway_config(self) -> dict[str, Any]:
