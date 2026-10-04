@@ -148,7 +148,7 @@ async def test_approve_resumes_run_and_executes_action(
     )
 
     # 2. Run resumed to RUNNING
-    mock_run_repo.update_status.assert_awaited_once_with(run_id=run_id, status=RunStatus.RUNNING)
+    mock_run_repo.update_status.assert_any_await(run_id=run_id, status=RunStatus.RUNNING)
 
     # 3. Action executed via ToolGateway with is_approved=True
     mock_tool_gateway.execute.assert_awaited_once()

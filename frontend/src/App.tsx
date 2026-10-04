@@ -12,19 +12,26 @@ import { DocumentationPage } from './pages/DocumentationPage';
 import { api } from './services/api';
 
 export const App: React.FC = () => {
-  const [pendingApprovalsCount, setPendingApprovalsCount] = useState<number>(2);
+  const [pendingApprovalsCount, setPendingApprovalsCount] = useState<number>(0);
 
   const fetchPendingApprovals = async () => {
     try {
       const data = await api.getApprovals();
       setPendingApprovalsCount(data.length);
     } catch {
-      setPendingApprovalsCount(2);
+      setPendingApprovalsCount(0);
     }
   };
 
   useEffect(() => {
     fetchPendingApprovals();
+    const handleUpdate = () => fetchPendingApprovals();
+    window.addEventListener('approvals_updated', handleUpdate);
+    const interval = setInterval(fetchPendingApprovals, 15000);
+    return () => {
+      window.removeEventListener('approvals_updated', handleUpdate);
+      clearInterval(interval);
+    };
   }, []);
 
   return (

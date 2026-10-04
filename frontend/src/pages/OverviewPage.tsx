@@ -10,6 +10,7 @@ import {
   Search,
   ArrowRight,
   ChevronDown,
+  RefreshCw,
 } from 'lucide-react';
 import { MetricCard } from '../components/common/MetricCard';
 import { ProviderCard } from '../components/common/ProviderCard';
@@ -20,6 +21,7 @@ import clsx from 'clsx';
 
 export const OverviewPage: React.FC = () => {
   const navigate = useNavigate();
+  const [isLoading, setIsLoading] = useState(true);
   const [stats, setStats] = useState<StatsSummary | null>(null);
   const [providers, setProviders] = useState<ProviderHealth[]>([]);
   const [runs, setRuns] = useState<RunItem[]>([]);
@@ -41,6 +43,7 @@ export const OverviewPage: React.FC = () => {
 
   useEffect(() => {
     const loadData = async () => {
+      setIsLoading(true);
       try {
         const [s, p, rData, h] = await Promise.all([
           api.getStats(),
@@ -63,10 +66,43 @@ export const OverviewPage: React.FC = () => {
         }
       } catch (err) {
         console.error('Failed to load live overview telemetry:', err);
+      } finally {
+        setIsLoading(false);
       }
     };
     loadData();
   }, []);
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col gap-8 animate-fade-in">
+        <div className="flex flex-col gap-2 border-b border-[#D9CFBF] pb-5">
+          <div className="flex items-center gap-2 text-[11px] text-[#5F664F]">
+            <span className="label-caps">Folio 01 // Operations Ledger</span>
+            <span className="w-1 h-1 rounded-full bg-[#8A8E7C]" />
+            <span className="font-mono text-[#8A8E7C]">Loading Telemetry</span>
+          </div>
+          <h1 className="font-serif text-[40px] text-[#2E3325] leading-none font-medium tracking-tight mt-1">
+            Governance & Execution Ledger
+          </h1>
+        </div>
+
+        <div className="card-archival p-16 flex flex-col items-center justify-center gap-4 text-center">
+          <RefreshCw className="w-10 h-10 animate-spin text-[#55633C]" />
+          <h3 className="font-serif text-[24px] font-medium text-[#2E3325]">
+            Retrieving Governance Telemetry...
+          </h3>
+          <p className="text-[14px] text-[#5F664F] max-w-md">
+            Querying active execution states, token expenditures, LLM health probes, and audit logs from Neon Postgres.
+          </p>
+          <div className="flex items-center gap-2 mt-2">
+            <span className="w-2 h-2 rounded-full bg-[#55633C] animate-pulse" />
+            <span className="font-mono text-[12px] text-[#8A8E7C]">Synchronizing live audit metrics...</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const handleExportCSV = () => {
     window.location.href = api.exportRunsCsvUrl();

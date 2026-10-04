@@ -9,6 +9,7 @@ import {
   Coins,
   Bot,
   GitBranch,
+  RefreshCw,
 } from 'lucide-react';
 import { DiffViewer } from '../components/common/DiffViewer';
 import { Modal } from '../components/common/Modal';
@@ -18,6 +19,8 @@ import clsx from 'clsx';
 
 export const ApprovalsPage: React.FC = () => {
   const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedApproval, setSelectedApproval] = useState<ApprovalRequest | null>(null);
   const [isApproveOpen, setIsApproveOpen] = useState(false);
   const [isRejectOpen, setIsRejectOpen] = useState(false);
@@ -26,11 +29,19 @@ export const ApprovalsPage: React.FC = () => {
   const [rejectFeedback, setRejectFeedback] = useState('');
   const [statusNotification, setStatusNotification] = useState<string | null>(null);
 
-  useEffect(() => {
-    const loadApprovals = async () => {
+  const loadApprovals = async () => {
+    setIsLoading(true);
+    try {
       const data = await api.getApprovals();
       setApprovals(data);
-    };
+    } catch (err) {
+      console.error('Failed to load approvals:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
     loadApprovals();
   }, []);
 
@@ -45,23 +56,39 @@ export const ApprovalsPage: React.FC = () => {
   };
 
   const handleConfirmApprove = async () => {
-    if (!selectedApproval) return;
-    const res = await api.approveRequest(selectedApproval.id, custodianComment);
-    setIsApproveOpen(false);
-    setCustodianComment('');
-    setApprovals((prev) => prev.filter((a) => a.id !== selectedApproval.id));
-    setStatusNotification(res.message);
-    setTimeout(() => setStatusNotification(null), 4000);
+    if (!selectedApproval || isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      const res = await api.approveRequest(selectedApproval.id, custodianComment);
+      setIsApproveOpen(false);
+      setCustodianComment('');
+      setApprovals((prev) => prev.filter((a) => a.id !== selectedApproval.id));
+      setStatusNotification(res.message || 'Action authorized and patch successfully executed to repository.');
+      window.dispatchEvent(new CustomEvent('approvals_updated'));
+      setTimeout(() => setStatusNotification(null), 5000);
+    } catch (err: any) {
+      setStatusNotification(`Approval failed: ${err.message || 'Execution error'}`);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleConfirmReject = async () => {
-    if (!selectedApproval) return;
-    const res = await api.rejectRequest(selectedApproval.id, `${rejectReason}: ${rejectFeedback}`);
-    setIsRejectOpen(false);
-    setRejectFeedback('');
-    setApprovals((prev) => prev.filter((a) => a.id !== selectedApproval.id));
-    setStatusNotification(res.message);
-    setTimeout(() => setStatusNotification(null), 4000);
+    if (!selectedApproval || isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      const res = await api.rejectRequest(selectedApproval.id, `${rejectReason}: ${rejectFeedback}`);
+      setIsRejectOpen(false);
+      setRejectFeedback('');
+      setApprovals((prev) => prev.filter((a) => a.id !== selectedApproval.id));
+      setStatusNotification(res.message || 'Action rejected and feedback dispatched to agent.');
+      window.dispatchEvent(new CustomEvent('approvals_updated'));
+      setTimeout(() => setStatusNotification(null), 5000);
+    } catch (err: any) {
+      setStatusNotification(`Rejection failed: ${err.message || 'Failed to reject'}`);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -107,8 +134,18 @@ export const ApprovalsPage: React.FC = () => {
         </div>
       )}
 
-      {/* Empty State */}
-      {approvals.length === 0 ? (
+      {/* Loading State or Empty State or List */}
+      {isLoading ? (
+        <div className="card-archival p-12 text-center flex flex-col items-center justify-center gap-3">
+          <RefreshCw className="w-8 h-8 animate-spin text-[#55633C]" />
+          <h3 className="font-serif text-[20px] font-medium text-[#2E3325]">
+            Querying Dual-Custody Quarantine...
+          </h3>
+          <p className="text-[13px] text-[#5F664F] max-w-md">
+            Scanning active policy invariant triggers and fetching pending approval requests from database ledger.
+          </p>
+        </div>
+      ) : approvals.length === 0 ? (
         <div className="card-archival p-12 text-center flex flex-col items-center justify-center">
           <CheckCircle className="w-10 h-10 text-[#55633C] mb-3" />
           <h3 className="font-serif text-[22px] font-medium text-[#2E3325]">
@@ -316,17 +353,20 @@ export const ApprovalsPage: React.FC = () => {
           <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#D9CFBF]">
             <button
               type="button"
+              disabled={isSubmitting}
               onClick={() => setIsApproveOpen(false)}
-              className="px-4 py-2 rounded text-[#5F664F] hover:text-[#2E3325]"
+              className="px-4 py-2 rounded text-[#5F664F] hover:text-[#2E3325] disabled:opacity-40"
             >
               Cancel
             </button>
             <button
               type="button"
+              disabled={isSubmitting}
               onClick={handleConfirmApprove}
-              className="px-5 py-2 rounded bg-[#55633C] hover:bg-[#2E3325] text-[#F7F2EB] font-medium transition-colors shadow-xs"
+              className="px-5 py-2 rounded bg-[#55633C] hover:bg-[#2E3325] text-[#F7F2EB] font-medium transition-all shadow-xs disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
-              Sign & Execute Patch
+              {isSubmitting && <RefreshCw className="w-4 h-4 animate-spin text-[#F7F2EB]" />}
+              <span>{isSubmitting ? 'Signing & Applying Patch...' : 'Sign & Execute Patch'}</span>
             </button>
           </div>
         </div>
@@ -335,7 +375,7 @@ export const ApprovalsPage: React.FC = () => {
       {/* REJECT MODAL */}
       <Modal
         isOpen={isRejectOpen}
-        onClose={() => setIsRejectOpen(false)}
+        onClose={() => !isSubmitting && setIsRejectOpen(false)}
         title="Reject Autonomous Action"
         subtitle={`Provide corrective feedback to ${selectedApproval?.agent_name}`}
       >
@@ -376,17 +416,20 @@ export const ApprovalsPage: React.FC = () => {
           <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#D9CFBF]">
             <button
               type="button"
+              disabled={isSubmitting}
               onClick={() => setIsRejectOpen(false)}
-              className="px-4 py-2 rounded text-[#5F664F] hover:text-[#2E3325]"
+              className="px-4 py-2 rounded text-[#5F664F] hover:text-[#2E3325] disabled:opacity-40"
             >
               Cancel
             </button>
             <button
               type="button"
+              disabled={isSubmitting}
               onClick={handleConfirmReject}
-              className="px-5 py-2 rounded bg-[#8C4A3F] hover:bg-[#682F26] text-[#F7F2EB] font-medium transition-colors shadow-xs"
+              className="px-5 py-2 rounded bg-[#8C4A3F] hover:bg-[#682F26] text-[#F7F2EB] font-medium transition-all shadow-xs disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
-              Reject & Dispatch Feedback
+              {isSubmitting && <RefreshCw className="w-4 h-4 animate-spin text-[#F7F2EB]" />}
+              <span>{isSubmitting ? 'Rejecting Intent...' : 'Reject & Dispatch Feedback'}</span>
             </button>
           </div>
         </div>

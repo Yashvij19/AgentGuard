@@ -20,7 +20,7 @@ interface SidebarProps {
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
-  pendingApprovalsCount = 2,
+  pendingApprovalsCount = 0,
   onRefresh,
 }) => {
   const [isRefreshing, setIsRefreshing] = useState(false);

@@ -89,7 +89,7 @@ class ApprovalRepository:
         Transition an approval from PENDING to APPROVED or REJECTED.
         Enforces that only PENDING requests can be decided.
         """
-        stmt = select(ApprovalORM).where(ApprovalORM.id == approval_id)
+        stmt = select(ApprovalORM).where(ApprovalORM.id == approval_id).with_for_update()
         result = await self._session.execute(stmt)
         orm = result.scalar_one_or_none()
 

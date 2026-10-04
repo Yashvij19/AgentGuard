@@ -133,11 +133,27 @@ class ApprovalService:
         3. Transitions run back to RUNNING.
         4. If execute_action and tool_gateway present, executes action with is_approved=True.
         """
-        approval = await self._approval_repo.update_decision(
-            approval_id=approval_id,
-            status=ApprovalStatus.APPROVED,
-            decided_by=decided_by,
-        )
+        try:
+            approval = await self._approval_repo.update_decision(
+                approval_id=approval_id,
+                status=ApprovalStatus.APPROVED,
+                decided_by=decided_by,
+            )
+        except InvalidApprovalStateError as state_err:
+            logger.warning(
+                "approval_already_processed_ignoring_duplicate",
+                approval_id=str(approval_id),
+                error=str(state_err),
+            )
+            existing = await self._approval_repo.get_by_id(approval_id)
+            return ApprovalDecisionResult(
+                approval_id=approval_id,
+                status=existing.status if existing else ApprovalStatus.APPROVED,
+                decided_by=decided_by,
+                decided_at=datetime.now(UTC),
+                executed=False,
+                execution_result={"message": "Approval already processed; duplicate execution suppressed."},
+            )
 
         run = await self._run_repo.get_by_id(approval.run_id)
         if not run:
@@ -269,12 +285,28 @@ class ApprovalService:
         2. Logs EventType.APPROVAL_REJECTED to Action Ledger.
         3. Transitions run to FAILED.
         """
-        approval = await self._approval_repo.update_decision(
-            approval_id=approval_id,
-            status=ApprovalStatus.REJECTED,
-            decided_by=decided_by,
-            rejection_reason=reason,
-        )
+        try:
+            approval = await self._approval_repo.update_decision(
+                approval_id=approval_id,
+                status=ApprovalStatus.REJECTED,
+                decided_by=decided_by,
+                rejection_reason=reason,
+            )
+        except InvalidApprovalStateError as state_err:
+            logger.warning(
+                "approval_already_processed_ignoring_duplicate_rejection",
+                approval_id=str(approval_id),
+                error=str(state_err),
+            )
+            existing = await self._approval_repo.get_by_id(approval_id)
+            return ApprovalDecisionResult(
+                approval_id=approval_id,
+                status=existing.status if existing else ApprovalStatus.REJECTED,
+                decided_by=decided_by,
+                decided_at=datetime.now(UTC),
+                executed=False,
+                message="Approval already rejected or decided; duplicate suppressed.",
+            )
         run = await self._run_repo.get_by_id(approval.run_id)
         if not run:
             raise RunNotFoundError(f"Run '{approval.run_id}' not found.")

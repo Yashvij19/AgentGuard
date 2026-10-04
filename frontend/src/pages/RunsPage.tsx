@@ -5,6 +5,7 @@ import {
   FilterX,
   ArrowRight,
   ChevronDown,
+  RefreshCw,
 } from 'lucide-react';
 import { StatusBadge } from '../components/common/StatusBadge';
 import { api } from '../services/api';
@@ -13,6 +14,7 @@ import clsx from 'clsx';
 
 export const RunsPage: React.FC = () => {
   const navigate = useNavigate();
+  const [isLoading, setIsLoading] = useState<boolean>(true);
   const [runs, setRuns] = useState<RunItem[]>([]);
   const [selectedState, setSelectedState] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
@@ -20,11 +22,14 @@ export const RunsPage: React.FC = () => {
 
   useEffect(() => {
     const loadRuns = async () => {
+      setIsLoading(true);
       try {
         const data = await api.getRuns({ pageSize: 50 });
         setRuns(data.items);
       } catch (err) {
         console.error('Failed to load runs from backend API:', err);
+      } finally {
+        setIsLoading(false);
       }
     };
     loadRuns();
@@ -58,6 +63,44 @@ export const RunsPage: React.FC = () => {
     setSearchQuery('');
     setSelectedEvent('All Events');
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col gap-8 animate-fade-in">
+        <div className="flex flex-col gap-2 border-b border-[#D9CFBF] pb-5">
+          <div className="flex items-center gap-2 text-[11px] text-[#5F664F]">
+            <span className="label-caps">Archival Folio 02 // Execution Runs</span>
+            <span className="w-1 h-1 rounded-full bg-[#8A8E7C]" />
+            <span className="font-mono text-[#8A8E7C]">Loading Execution Ledger</span>
+          </div>
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mt-1">
+            <div>
+              <h1 className="font-serif text-[40px] text-[#2E3325] leading-none font-medium tracking-tight">
+                Agent Execution Runs
+              </h1>
+              <p className="text-[15px] text-[#5F664F] mt-2 max-w-2xl leading-relaxed">
+                Historical ledger of automated coding runs, policy checkpoints, and token disbursements.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="card-archival p-16 flex flex-col items-center justify-center gap-4 text-center">
+          <RefreshCw className="w-10 h-10 animate-spin text-[#55633C]" />
+          <h3 className="font-serif text-[24px] font-medium text-[#2E3325]">
+            Retrieving Execution Ledger...
+          </h3>
+          <p className="text-[14px] text-[#5F664F] max-w-md">
+            Querying run checkpoints, policy evaluations, and cryptographic audit traces.
+          </p>
+          <div className="flex items-center gap-2 mt-2">
+            <span className="w-2 h-2 rounded-full bg-[#55633C] animate-pulse" />
+            <span className="font-mono text-[12px] text-[#8A8E7C]">Synchronizing historical execution runs...</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-8">
@@ -254,7 +297,7 @@ export const RunsPage: React.FC = () => {
 
         {/* Footer Summary */}
         <div className="p-4 bg-[#EAE2D6]/30 border-t border-[#D9CFBF] flex items-center justify-between text-[12px] text-[#5F664F]">
-          <span>Showing {filteredRuns.length} of 142 custodial transactions</span>
+          <span>Showing {filteredRuns.length} of {runs.length} custodial transactions</span>
           <span className="font-mono text-[#8A8E7C]">Audit Hash Verified · Ed25519</span>
         </div>
       </div>
